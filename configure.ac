@@ -1578,6 +1578,7 @@ AC_CONFIG_FILES([Makefile \
 		plugins/omstdout/Makefile \
 		plugins/omjournal/Makefile \
 		plugins/pmrfc3164sd/Makefile \
+		plugins/pmkeyvalue/Makefile \
 		plugins/pmlastmsg/Makefile \
 		plugins/pmcisconames/Makefile \
 		plugins/pmsnare/Makefile \
