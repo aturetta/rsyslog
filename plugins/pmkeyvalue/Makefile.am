@@ -1,8 +1,8 @@
-pkglib_LTLIBRARIES = pmfortigate.la
+pkglib_LTLIBRARIES = pmkeyvalue.la
 
-pmrfc3164sd_la_SOURCES = pmfortigate.c
-pmrfc3164sd_la_CPPFLAGS =  $(RSRT_CFLAGS) $(PTHREADS_CFLAGS) -I ../../tools
-pmrfc3164sd_la_LDFLAGS = -module -avoid-version
-pmrfc3164sd_la_LIBADD = 
+pmkeyvalue_la_SOURCES = pmkeyvalue.c
+pmkeyvalue_la_CPPFLAGS =  $(RSRT_CFLAGS) $(PTHREADS_CFLAGS) -I ../../tools
+pmkeyvalue_la_LDFLAGS = -module -avoid-version
+pmkeyvalue_la_LIBADD = 
 
 EXTRA_DIST = 
