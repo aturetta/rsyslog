@@ -270,6 +270,10 @@ if ENABLE_ORACLE
 SUBDIRS += plugins/omoracle
 endif
 
+if ENABLE_PMKEYVALUE
+SUBDIRS += plugins/pmkeyvalue
+endif
+
 if ENABLE_GUI
 SUBDIRS += java
 endif

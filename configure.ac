@@ -1322,6 +1322,19 @@ AC_ARG_ENABLE(pmrfc3164sd,
 AM_CONDITIONAL(ENABLE_PMRFC3164SD, test x$enable_pmrfc3164sd = xyes)
 
 
+# settings for pmkeyvalue
+AC_ARG_ENABLE(pmkeyvalue,
+        [AS_HELP_STRING([--enable-pmkeyvalue],[Compiles keyvalue parser module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_pmkeyvalue="yes" ;;
+          no) enable_pmkeyvalue="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-pmkeyvalue) ;;
+         esac],
+        [enable_pmkeyvalue=no]
+)
+AM_CONDITIONAL(ENABLE_PMKEYVALUE, test x$enable_pmkeyvalue = xyes)
+
+
 # settings for omruleset
 AC_ARG_ENABLE(omruleset,
         [AS_HELP_STRING([--enable-omruleset],[Compiles ruleset forwarding module @<:@default=no@:>@])],
@@ -1661,6 +1674,7 @@ echo "    pmlastmsg module will be compiled:        $enable_pmlastmsg"
 echo "    pmcisconames module will be compiled:     $enable_pmcisconames"
 echo "    pmaixforwardedfrom module w.be compiled:  $enable_pmaixforwardedfrom"
 echo "    pmsnare module will be compiled:          $enable_pmsnare"
+echo "    pmkeyvalue module will be compiled:       $enable_pmkeyvalue"
 echo
 echo "---{ message modification modules }---"
 echo "    mmnormalize module will be compiled:      $enable_mmnormalize"
