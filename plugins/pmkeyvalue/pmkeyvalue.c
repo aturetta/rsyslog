@@ -71,7 +71,221 @@ CODESTARTisCompatibleWithFeature
 ENDisCompatibleWithFeature
 
 
-/* parse a legay-formatted syslog message.
+/* utility functions invoked by parser */
+
+enum PARSEKVSTATES { PKV_INIT, PKV_NAME, PKV_VALUE };
+
+struct _field_parsing {
+	char name[256];
+	char value[4096];
+	int numericValue;
+	int numSignNotAllowed;
+	int numDotNotAllowed;
+	int numFoundZero;
+	int numZeroLeading;
+    char date[20];
+    char time[20];
+};
+
+static void _save_json_value(json_object *out, struct _field_parsing *pfp) {
+	json_object *new_item;
+	if (pfp->value[0]=='\0')
+		pfp->numericValue = FALSE;;
+	if (pfp->numericValue && pfp->numZeroLeading && pfp->value[1]=='\0')
+		pfp->numZeroLeading = FALSE;
+	if (strstr(pfp->name, "id") == NULL && pfp->numericValue && !pfp->numZeroLeading) {
+		char *unused;
+		if (pfp->numDotNotAllowed) {
+			new_item = json_object_new_double(strtod(pfp->value, &unused));
+		} else {
+			new_item = json_object_new_int64(strtoll(pfp->value,&unused,10));
+		}
+	}
+	else
+		new_item = json_object_new_string(pfp->value);
+	json_object_object_add(out, pfp->name, new_item);
+}
+
+static int parseKV (const char* str, int strsize, json_object *out) {
+	struct _field_parsing fp;
+	const char *in;
+	char *nm=fp.name, *vl=fp.value;
+	int inQuotes=FALSE;
+	int inDoubleQuotes=FALSE;
+	int inEscape=FALSE;
+	int doCopy=FALSE, doSave=FALSE;
+	enum PARSEKVSTATES state = PKV_INIT;
+
+	in=str;
+	while (*in!='\0' && strsize>0) {
+		doCopy = FALSE;
+		doSave = FALSE;
+		switch (*in) {
+		case '"':
+			if (inEscape) {
+				inEscape = FALSE;
+				doCopy = TRUE;
+			} else if (inQuotes) {
+				inQuotes = FALSE;
+				inDoubleQuotes = TRUE;
+			} else if (inDoubleQuotes) {
+				inDoubleQuotes = FALSE;
+				inQuotes = TRUE;
+				doCopy = TRUE;
+			} else {
+				inQuotes = TRUE;
+			}
+			break;
+		case '\\':
+			if (inEscape) {
+				inEscape = FALSE;
+				doCopy = TRUE;
+			} else {
+				inEscape = TRUE;
+			}
+			break;
+		case '=':
+			if (inEscape) {
+				inEscape = FALSE;
+				doCopy = TRUE;
+			} else if (inQuotes) {
+				doCopy = TRUE;
+			} else if (state==PKV_NAME) {
+				*nm = '\0';
+				state=PKV_VALUE;
+			} else {
+				// WARNING: should be a syntax error !!!
+				doCopy = TRUE;
+			}
+
+			break;
+		case ' ':
+		case '\t':
+			if (inEscape) {
+				inEscape = FALSE;
+				doCopy = TRUE;
+			} else if (inQuotes) {
+				doCopy = TRUE;
+			} else if (state==PKV_VALUE) {
+				*vl = '\0';
+				state = PKV_INIT;
+				doSave = TRUE;
+			} else if (state==PKV_NAME) {
+				*nm = '\0';
+				*vl = '\0';
+				state = PKV_INIT;
+				doSave = TRUE;
+			}
+			break;
+		case '\r':
+		case '\n':
+			if (inEscape) {
+				inEscape = FALSE;
+			} else if (inQuotes) {
+				doCopy = TRUE;
+			} else if (state==PKV_VALUE) {
+				*vl = '\0';
+				state = PKV_INIT;
+				doSave = TRUE;
+			} else if (state==PKV_NAME) {
+				*nm = '\0';
+				*vl = '\0';
+				state = PKV_INIT;
+				doSave = TRUE;
+			}
+			break;
+		default:
+			if (inEscape) {
+				inEscape = FALSE;
+			}
+			if (inDoubleQuotes) {
+				inQuotes=FALSE;
+				inDoubleQuotes=FALSE;
+			}
+			if (state==PKV_INIT) {
+				state=PKV_NAME;
+				nm = fp.name;
+				vl = fp.value;
+				fp.numericValue=TRUE;
+				fp.numSignNotAllowed=FALSE;
+				fp.numDotNotAllowed=FALSE;
+				fp.numFoundZero=0;
+				fp.numZeroLeading = TRUE;
+			}
+			doCopy = TRUE;
+			break;
+		}
+		if (doSave && fp.name[0]!='\0') {
+			_save_json_value(out,&fp);
+			fp.name[0] = '\0';
+		}
+		if (doCopy) {
+			switch (state) {
+			case PKV_NAME:
+				*nm++ = *in;
+				break;
+			case PKV_VALUE:
+				if (fp.numericValue) {
+					switch (*in) {
+					case '-':
+					case '+':
+						if (fp.numSignNotAllowed)
+							fp.numericValue = FALSE;
+						else
+							fp.numSignNotAllowed = TRUE;
+						break;
+					case '.':
+						if (fp.numDotNotAllowed)
+							fp.numericValue = FALSE;
+						else
+							fp.numDotNotAllowed = TRUE;
+						fp.numSignNotAllowed = TRUE;
+						break;
+					case '0':
+						if (fp.numZeroLeading)
+							fp.numFoundZero++;
+						fp.numSignNotAllowed = TRUE;
+						break;
+					case '1':
+					case '2':
+					case '3':
+					case '4':
+					case '5':
+					case '6':
+					case '7':
+					case '8':
+					case '9':
+						if (!fp.numFoundZero && !fp.numDotNotAllowed) {
+							fp.numZeroLeading = FALSE;
+						}
+						fp.numFoundZero = 0;
+						fp.numSignNotAllowed = TRUE;
+						break;
+					default:
+						fp.numericValue = FALSE;
+					}
+				}
+				*vl++ = *in;
+				break;
+			default:
+				break;
+			}
+		}
+
+		in++;
+		strsize--;
+	}
+	*nm = '\0';
+	*vl = '\0';
+	if (fp.name[0]!='\0') {
+		_save_json_value(out,&fp);
+	}
+	return 0;
+}
+
+
+
+/* parse a key-value formatted syslog message.
  */
 BEGINparse
 	uchar *p2parse;
