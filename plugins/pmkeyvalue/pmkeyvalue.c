@@ -76,15 +76,15 @@ ENDisCompatibleWithFeature
 enum PARSEKVSTATES { PKV_INIT, PKV_NAME, PKV_VALUE };
 
 struct _field_parsing {
-	char name[256];
-	char value[4096];
+	uchar name[256];
+	uchar value[4096];
 	int numericValue;
 	int numSignNotAllowed;
 	int numDotNotAllowed;
 	int numFoundZero;
 	int numZeroLeading;
-    char date[20];
-    char time[20];
+	uchar date[20];
+	uchar time[20];
 };
 
 static void _save_json_value(json_object *out, struct _field_parsing *pfp) {
@@ -93,23 +93,23 @@ static void _save_json_value(json_object *out, struct _field_parsing *pfp) {
 		pfp->numericValue = FALSE;;
 	if (pfp->numericValue && pfp->numZeroLeading && pfp->value[1]=='\0')
 		pfp->numZeroLeading = FALSE;
-	if (strstr(pfp->name, "id") == NULL && pfp->numericValue && !pfp->numZeroLeading) {
+	if (strstr((const char*)(pfp->name), "id") == NULL && pfp->numericValue && !pfp->numZeroLeading) {
 		char *unused;
 		if (pfp->numDotNotAllowed) {
-			new_item = json_object_new_double(strtod(pfp->value, &unused));
+			new_item = json_object_new_double(strtod((const char*)(pfp->value), &unused));
 		} else {
-			new_item = json_object_new_int64(strtoll(pfp->value,&unused,10));
+			new_item = json_object_new_int64(strtoll((const char*)(pfp->value),&unused,10));
 		}
 	}
 	else
-		new_item = json_object_new_string(pfp->value);
-	json_object_object_add(out, pfp->name, new_item);
+		new_item = json_object_new_string((const char*)(pfp->value));
+	json_object_object_add(out, (const char*)(pfp->name), new_item);
 }
 
-static int parseKV (const char* str, int strsize, json_object *out) {
+static int parseKV (const uchar* str, int strsize, json_object *out) {
 	struct _field_parsing fp;
-	const char *in;
-	char *nm=fp.name, *vl=fp.value;
+	const uchar *in;
+	uchar *nm=fp.name, *vl=fp.value;
 	int inQuotes=FALSE;
 	int inDoubleQuotes=FALSE;
 	int inEscape=FALSE;
@@ -290,11 +290,12 @@ static int parseKV (const char* str, int strsize, json_object *out) {
 BEGINparse
 	uchar *p2parse;
 	int lenMsg;
-	int bTAGCharDetected;
-	int i;	/* general index for parsing */
-	uchar bufParseTAG[CONF_TAG_MAXSIZE];
-	uchar bufParseHOSTNAME[CONF_HOSTNAME_MAXSIZE];
+	//int bTAGCharDetected;
+	//int i;	/* general index for parsing */
+	//uchar bufParseTAG[CONF_TAG_MAXSIZE];
+	//uchar bufParseHOSTNAME[CONF_HOSTNAME_MAXSIZE];
 	uchar *pBuf = NULL;
+	json_object *my_root;
 CODESTARTparse
 	dbgprintf("Message will now be parsed by the key-value parser.\n");
 	assert(pMsg != NULL);
@@ -306,6 +307,11 @@ CODESTARTparse
 	CHKmalloc(pBuf = MALLOC(sizeof(uchar) * (lenMsg + 1)));
 
 	/* KeyValuePairs */
+	my_root = json_object_new_object();
+	parseKV(p2parse, lenMsg, my_root);
+	msgAddJSON(pMsg, (uchar*)"!", my_root);
+	iRet = RS_RET_OK;
+
 
 finalize_it:
 	if(pBuf != NULL)
