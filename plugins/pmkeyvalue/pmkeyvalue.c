@@ -70,6 +70,187 @@ CODESTARTisCompatibleWithFeature
 		iRet = RS_RET_OK;
 ENDisCompatibleWithFeature
 
+/**
+ * Parse a 32 bit integer number from a string.
+ *
+ * \param ppsz Pointer to the Pointer to the string being parsed. It
+ *             must be positioned at the first digit. Will be updated 
+ *             so that on return it points to the first character AFTER
+ *             the integer parsed.
+ * \param pLenStr pointer to string length, decremented on exit by
+ *                characters processed
+ * 		  Note that if an empty string (len < 1) is passed in,
+ * 		  the method always returns zero.
+ * \retval The number parsed.
+ */
+static inline int
+srSLMGParseInt32(uchar** ppsz, int *pLenStr)
+{
+	register int i;
+
+	i = 0;
+	while(*pLenStr > 0 && **ppsz >= '0' && **ppsz <= '9') {
+		i = i * 10 + **ppsz - '0';
+		++(*ppsz);
+		--(*pLenStr);
+	}
+
+	return i;
+}
+
+/**
+ * Parse a TIMESTAMP-3339-like (optional timezone).
+ * updates the parse pointer position. The pTime parameter
+ * is guranteed to be updated only if a new valid timestamp
+ * could be obtained (restriction added 2008-09-16 by rgerhards).
+ * This method now also checks the maximum string length it is passed.
+ * If a *valid* timestamp is found, the string length is decremented
+ * by the number of characters processed. If it is not a valid timestamp,
+ * the length is kept unmodified. -- rgerhards, 2009-09-23
+ */
+static rsRetVal
+Parse_KV_TIMESTAMP(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
+{
+	uchar *pszTS = *ppszTS;
+	/* variables to temporarily hold time information while we parse */
+	int year;
+	int month;
+	int day;
+	int hour; /* 24 hour clock */
+	int minute;
+	int second;
+	int secfrac;	/* fractional seconds (must be 32 bit!) */
+	int secfracPrecision;
+	char OffsetMode;	/* UTC offset + or - */
+	char OffsetHour;	/* UTC offset in hours */
+	int OffsetMinute;	/* UTC offset in minutes */
+	int lenStr;
+	/* end variables to temporarily hold time information while we parse */
+	DEFiRet;
+
+	assert(pTime != NULL);
+	assert(ppszTS != NULL);
+	assert(pszTS != NULL);
+
+	lenStr = *pLenStr;
+	year = srSLMGParseInt32(&pszTS, &lenStr);
+
+	/* We take the liberty to accept slightly malformed timestamps e.g. in 
+	 * the format of 2003-9-1T1:0:0. This doesn't hurt on receiving. Of course,
+	 * with the current state of affairs, we would never run into this code
+	 * here because at postion 11, there is no "T" in such cases ;)
+	 */
+	if(lenStr == 0 || *pszTS++ != '-')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+	month = srSLMGParseInt32(&pszTS, &lenStr);
+	if(month < 1 || month > 12)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	if(lenStr == 0 || *pszTS++ != '-')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+	day = srSLMGParseInt32(&pszTS, &lenStr);
+	if(day < 1 || day > 31)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	if(lenStr == 0 || *pszTS++ != 'T')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+
+	hour = srSLMGParseInt32(&pszTS, &lenStr);
+	if(hour < 0 || hour > 23)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	if(lenStr == 0 || *pszTS++ != ':')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+	minute = srSLMGParseInt32(&pszTS, &lenStr);
+	if(minute < 0 || minute > 59)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	if(lenStr == 0 || *pszTS++ != ':')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+	second = srSLMGParseInt32(&pszTS, &lenStr);
+	if(second < 0 || second > 60)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+ 
+        DBGPRINTF("DATE & TIME PARSED\n");
+	/* Now let's see if we have secfrac */
+	if(lenStr > 0 && *pszTS == '.') {
+		--lenStr;
+		uchar *pszStart = ++pszTS;
+		secfrac = srSLMGParseInt32(&pszTS, &lenStr);
+		secfracPrecision = (int) (pszTS - pszStart);
+	} else {
+		secfracPrecision = 0;
+		secfrac = 0;
+	}
+
+	/* check the timezone */
+	// allow for local time (without timezone info)
+	if (lenStr == 0 || *pszTS == '\0' || *pszTS == ' ') {
+		OffsetMode = 'L';
+	} else if(*pszTS == 'Z') {
+		--lenStr;
+		pszTS++; /* eat Z */
+		OffsetMode = 'Z';
+		OffsetHour = 0;
+		OffsetMinute = 0;
+	} else if((*pszTS == '+') || (*pszTS == '-')) {
+		OffsetMode = *pszTS;
+		--lenStr;
+		pszTS++;
+
+		OffsetHour = srSLMGParseInt32(&pszTS, &lenStr);
+		if(OffsetHour < 0 || OffsetHour > 23)
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+		if(lenStr == 0 || *pszTS != ':')
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		--lenStr;
+		pszTS++;
+		OffsetMinute = srSLMGParseInt32(&pszTS, &lenStr);
+		if(OffsetMinute < 0 || OffsetMinute > 59)
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	} else {
+		/* there MUST be TZ information */
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	}
+
+	/* OK, we actually have a 3339 timestamp, so let's indicated this */
+	if(lenStr > 0) {
+		if(*pszTS != ' ' && *pszTS != '\0' ) /* if it is not a space, it can not be a "good" time - 2010-02-22 rgerhards */
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		++pszTS; /* just skip past it */
+		--lenStr;
+	}
+
+	/* we had success, so update parse pointer and caller-provided timestamp */
+	*ppszTS = pszTS;
+	pTime->year = year;
+	pTime->month = month;
+	pTime->day = day;
+	pTime->hour = hour;
+	pTime->minute = minute;
+	pTime->second = second;
+	pTime->secfrac = secfrac;
+	pTime->secfracPrecision = secfracPrecision;
+	if ( OffsetMode == '+' || OffsetMode == '-' || OffsetMode == 'Z' ) {
+		pTime->timeType = 2;
+		pTime->OffsetMode = OffsetMode;
+		pTime->OffsetHour = OffsetHour;
+		pTime->OffsetMinute = OffsetMinute;
+	} else if (pTime->timeType==0) {
+		pTime->timeType = 1;
+		pTime->OffsetMode = '\0';
+	}
+	*pLenStr = lenStr;
+
+finalize_it:
+	RETiRet;
+}
 
 /* utility functions invoked by parser */
 
@@ -309,6 +490,32 @@ CODESTARTparse
 	/* KeyValuePairs */
 	my_root = json_object_new_object();
 	parseKV(p2parse, lenMsg, my_root);
+
+	DBGPRINTF("before parser: timestamp type: %d\n",pMsg->tTIMESTAMP.timeType);
+#define _KV_TSLEN 30
+	char timestamp[_KV_TSLEN];
+	json_object *dtfield, *tmfield;
+	uchar *_pUnused = (uchar*)timestamp;
+	int _iUnused= _KV_TSLEN;
+	timestamp[0] = '\0';
+	if (json_object_object_get_ex(my_root, "date", &dtfield)) {
+		strncpy(timestamp, json_object_get_string(dtfield), _KV_TSLEN-2);
+	}
+	if (json_object_object_get_ex(my_root, "time", &tmfield)) {
+		if (timestamp[0] != '\0')
+			strcat(timestamp, "T" );
+		strncat(timestamp, json_object_get_string(tmfield), _KV_TSLEN-1-strlen(timestamp));
+	}
+	DBGPRINTF("KV timestamp: %s\n",timestamp);
+	json_object_object_add(my_root, "eventDate", json_object_new_string(timestamp));
+	if (Parse_KV_TIMESTAMP(&(pMsg->tTIMESTAMP), &_pUnused, &_iUnused) == RS_RET_OK) {
+		DBGPRINTF("after parser: timestamp type: %d\n",pMsg->tTIMESTAMP.timeType);
+		if(pMsg->tTIMESTAMP.timeType==1 && pMsg->dfltTZ[0] != '\0') {
+			DBGPRINTF("applied default TZ\n");
+			applyDfltTZ(&pMsg->tTIMESTAMP, pMsg->dfltTZ);
+		}
+		DBGPRINTF("KV timestamp parsed\n");
+	}
 	msgAddJSON(pMsg, (uchar*)"!", my_root);
 	iRet = RS_RET_OK;
 
