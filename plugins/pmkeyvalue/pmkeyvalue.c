@@ -46,7 +46,7 @@
 
 MODULE_TYPE_PARSER
 MODULE_TYPE_NOKEEP
-MODULE_CNFNAME("pmkeyvalue")
+//MODULE_CNFNAME("pmkeyvalue")
 PARSER_NAME("contrib.keyvalue")
 
 /* internal structures
@@ -297,7 +297,7 @@ BEGINparse
 	uchar *pBuf = NULL;
 	json_object *my_root;
 CODESTARTparse
-	dbgprintf("Message will now be parsed by the key-value parser.\n");
+	DBGPRINTF("Message will now be parsed by the key-value parser.\n");
 	assert(pMsg != NULL);
 	assert(pMsg->pszRawMsg != NULL);
 	lenMsg = pMsg->iLenRawMsg - pMsg->offAfterPRI; /* note: offAfterPRI is already the number of PRI chars (do not add one!) */
@@ -345,7 +345,7 @@ CODEmodInit_QueryRegCFSLineHdlr
 	CHKiRet(objUse(parser, CORE_COMPONENT));
 	CHKiRet(objUse(datetime, CORE_COMPONENT));
 
-	dbgprintf("key/value parser init called\n");
+	DBGPRINTF("key/value parser init called\n");
  	bParseHOSTNAMEandTAG = glbl.GetParseHOSTNAMEandTAG(); /* cache value, is set only during rsyslogd option processing */
 
 
