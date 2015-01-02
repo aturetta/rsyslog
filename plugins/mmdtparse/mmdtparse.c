@@ -36,6 +36,7 @@
 #include "template.h"
 #include "module-template.h"
 #include "errmsg.h"
+#include "datetime.h"
 
 MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
@@ -48,7 +49,8 @@ DEF_OMOD_STATIC_DATA
 /* config variables */
 
 typedef struct _instanceData {
-	char fieldname[CONF_HOSTNAME_MAXSIZE];
+	char srcField[CONF_HOSTNAME_MAXSIZE];
+	char dstField[CONF_HOSTNAME_MAXSIZE];
 } instanceData;
 
 struct modConfData_s {
@@ -61,7 +63,8 @@ static modConfData_t *runModConf = NULL;/* modConf ptr to use for the current ex
 /* tables for interfacing with the v6 config system */
 /* action (instance) parameters */
 static struct cnfparamdescr actpdescr[] = {
-	{ "field", eCmdHdlrGetWord, 0 },
+	{ "source", eCmdHdlrGetWord, 0 },
+	{ "destination", eCmdHdlrGetWord, 0 },
 };
 static struct cnfparamblk actpblk =
 	{ CNFPARAMBLK_VERSION,
@@ -106,9 +109,11 @@ srSLMGParseInt32(uchar** ppsz, int *pLenStr)
  * If a *valid* timestamp is found, the string length is decremented
  * by the number of characters processed. If it is not a valid timestamp,
  * the length is kept unmodified. -- rgerhards, 2009-09-23
+ *
+ * Code borrowed from datetime.c (ParseTIMESTAMP3339)
  */
 static rsRetVal
-Parse_loose_TIMESTAMP(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
+ParseTIMESTAMP_loose(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 {
 	uchar *pszTS = *ppszTS;
 	/* variables to temporarily hold time information while we parse */
@@ -175,7 +180,7 @@ Parse_loose_TIMESTAMP(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	if(second < 0 || second > 60)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
  
-        DBGPRINTF("DATE & TIME PARSED\n");
+        //DBGPRINTF("DATE & TIME PARSED\n");
 	/* Now let's see if we have secfrac */
 	if(lenStr > 0 && *pszTS == '.') {
 		--lenStr;
@@ -251,6 +256,318 @@ finalize_it:
 	RETiRet;
 }
 
+/**
+ * Parse a apache/httpd timestamp. The pTime parameter
+ * is guranteed to be updated only if a new valid timestamp
+ * could be obtained (restriction added 2008-09-16 by rgerhards). This
+ * also means the caller *must* provide a valid (probably current) 
+ * timstamp in pTime when calling this function. a 3164 timestamp contains
+ * only partial information and only that partial information is updated.
+ * So the "output timestamp" is a valid timestamp only if the "input
+ * timestamp" was valid, too. The is actually an optimization, as it
+ * permits us to use a pre-aquired timestamp and thus avoids to do
+ * a (costly) time() call. Thanks to David Lang for insisting on
+ * time() call reduction ;).
+ * This method now also checks the maximum string length it is passed.
+ * If a *valid* timestamp is found, the string length is decremented
+ * by the number of characters processed. If it is not a valid timestamp,
+ * the length is kept unmodified. -- rgerhards, 2009-09-23
+ *
+ * Code borrowed from datetime.c (ParseTIMESTAMP3164)
+ */
+static rsRetVal
+ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
+{
+	/* variables to temporarily hold time information while we parse */
+	int month;
+	int day;
+	int year = 0; /* 0 means no year provided */
+	int hour; /* 24 hour clock */
+	int minute;
+	int second;
+	char OffsetMode;	/* UTC offset + or - */
+	char OffsetHour;	/* UTC offset in hours */
+	int OffsetMinute;	/* UTC offset in minutes */
+	/* end variables to temporarily hold time information while we parse */
+	int lenStr;
+	uchar *pszTS;
+	DEFiRet;
+
+	assert(ppszTS != NULL);
+	pszTS = *ppszTS;
+	assert(pszTS != NULL);
+	assert(pTime != NULL);
+	assert(pLenStr != NULL);
+	lenStr = *pLenStr;
+
+	/* we accept a slightly malformed timestamp when receiving. This is
+	 * we accept one-digit days
+	 */
+	while((*pszTS == ' ' || *pszTS == '[') && lenStr>0) {
+		--lenStr;
+		++pszTS;
+	}
+
+	day = srSLMGParseInt32(&pszTS, &lenStr);
+	if(day < 1 || day > 31)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	if(lenStr == 0 || *pszTS++ != '/')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+
+	//DBGPRINTF("DTPARSE: day parsed %d\n",day);
+	/* If we look at the month (Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec),
+	 * we may see the following character sequences occur:
+	 *
+	 * J(an/u(n/l)), Feb, Ma(r/y), A(pr/ug), Sep, Oct, Nov, Dec
+	 *
+	 * We will use this for parsing, as it probably is the
+	 * fastest way to parse it.
+	 *
+	 * we do case-insensitive comparisons
+	 */
+	if(lenStr < 3)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	switch(*pszTS++)
+	{
+	case 'j':
+	case 'J':
+		if(*pszTS == 'a' || *pszTS == 'A') {
+			++pszTS;
+			if(*pszTS == 'n' || *pszTS == 'N') {
+				++pszTS;
+				month = 1;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else if(*pszTS == 'u' || *pszTS == 'U') {
+			++pszTS;
+			if(*pszTS == 'n' || *pszTS == 'N') {
+				++pszTS;
+				month = 6;
+			} else if(*pszTS == 'l' || *pszTS == 'L') {
+				++pszTS;
+				month = 7;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		break;
+	case 'f':
+	case 'F':
+		if(*pszTS == 'e' || *pszTS == 'E') {
+			++pszTS;
+			if(*pszTS == 'b' || *pszTS == 'B') {
+				++pszTS;
+				month = 2;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		break;
+	case 'm':
+	case 'M':
+		if(*pszTS == 'a' || *pszTS == 'A') {
+			++pszTS;
+			if(*pszTS == 'r' || *pszTS == 'R') {
+				++pszTS;
+				month = 3;
+			} else if(*pszTS == 'y' || *pszTS == 'Y') {
+				++pszTS;
+				month = 5;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		break;
+	case 'a':
+	case 'A':
+		if(*pszTS == 'p' || *pszTS == 'P') {
+			++pszTS;
+			if(*pszTS == 'r' || *pszTS == 'R') {
+				++pszTS;
+				month = 4;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else if(*pszTS == 'u' || *pszTS == 'U') {
+			++pszTS;
+			if(*pszTS == 'g' || *pszTS == 'G') {
+				++pszTS;
+				month = 8;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		break;
+	case 's':
+	case 'S':
+		if(*pszTS == 'e' || *pszTS == 'E') {
+			++pszTS;
+			if(*pszTS == 'p' || *pszTS == 'P') {
+				++pszTS;
+				month = 9;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		break;
+	case 'o':
+	case 'O':
+		if(*pszTS == 'c' || *pszTS == 'C') {
+			++pszTS;
+			if(*pszTS == 't' || *pszTS == 'T') {
+				++pszTS;
+				month = 10;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		break;
+	case 'n':
+	case 'N':
+		if(*pszTS == 'o' || *pszTS == 'O') {
+			++pszTS;
+			if(*pszTS == 'v' || *pszTS == 'V') {
+				++pszTS;
+				month = 11;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		break;
+	case 'd':
+	case 'D':
+		if(*pszTS == 'e' || *pszTS == 'E') {
+			++pszTS;
+			if(*pszTS == 'c' || *pszTS == 'C') {
+				++pszTS;
+				month = 12;
+			} else
+				ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		} else
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		break;
+	default:
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	}
+
+	lenStr -= 3;
+
+	//DBGPRINTF("DTPARSE: month parsed %d\n",month);
+	/* done month */
+
+	if(lenStr == 0 || *pszTS++ != '/')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+	year = srSLMGParseInt32(&pszTS, &lenStr);
+	//DBGPRINTF("DTPARSE: year parsed %d\n",year);
+
+	/* hour part */
+	if(lenStr == 0 || *pszTS++ != ':')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+	hour = srSLMGParseInt32(&pszTS, &lenStr);
+
+	//DBGPRINTF("DTPARSE: hour parsed %d\n",hour);
+	if(hour < 0 || hour > 23)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	if(lenStr == 0 || *pszTS++ != ':')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+	minute = srSLMGParseInt32(&pszTS, &lenStr);
+	//DBGPRINTF("DTPARSE: minute parsed %d\n",minute);
+	if(minute < 0 || minute > 59)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	if(lenStr == 0 || *pszTS++ != ':')
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	--lenStr;
+	second = srSLMGParseInt32(&pszTS, &lenStr);
+	//DBGPRINTF("DTPARSE: second parsed %d\n",second);
+	if(second < 0 || second > 60)
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+
+	while((*pszTS == ' ' || *pszTS == 'T') && lenStr>0) {
+		--lenStr;
+		++pszTS;
+	}
+	/* check the timezone */
+	// allow for local time (without timezone info)
+	if (lenStr == 0 || *pszTS == '\0' || *pszTS == ' ') {
+		OffsetMode = 'L';
+	} else if(*pszTS == 'Z') {
+		--lenStr;
+		pszTS++; /* eat Z */
+		OffsetMode = 'Z';
+		OffsetHour = 0;
+		OffsetMinute = 0;
+	} else if((*pszTS == '+') || (*pszTS == '-')) {
+		OffsetMode = *pszTS;
+		--lenStr;
+		pszTS++;
+
+		OffsetHour = srSLMGParseInt32(&pszTS, &lenStr);
+		//DBGPRINTF("DTPARSE: offset hour parsed %d\n",OffsetHour);
+		if(OffsetHour < 0 || (OffsetHour > 23 && OffsetHour<30))
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+		if(OffsetHour >=30) {
+			OffsetMinute = OffsetHour%100;
+			OffsetHour /= 100;
+		} else {
+			if(lenStr > 0 && *pszTS == ':') {
+				--lenStr;
+				pszTS++;
+			}
+			OffsetMinute = srSLMGParseInt32(&pszTS, &lenStr);
+			//DBGPRINTF("DTPARSE: offset minute parsed %d\n",OffsetMinute);
+		}
+		if(OffsetMinute < 0 || OffsetMinute > 59)
+			ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	} else {
+		/* there MUST be TZ information */
+		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	}
+
+	/* we had success, so update parse pointer and caller-provided timestamp
+	 * fields we do not have are not updated in the caller's timestamp. This
+	 * is the reason why the caller must pass in a correct timestamp.
+	 */
+	*ppszTS = pszTS; /* provide updated parse position back to caller */
+	pTime->month = month;
+	if(year > 0)
+		pTime->year = year; /* persist year if detected */
+	pTime->day = day;
+	pTime->hour = hour;
+	pTime->minute = minute;
+	pTime->second = second;
+ 	pTime->secfracPrecision = 0;
+	pTime->secfrac = 0;
+	if ( OffsetMode == '+' || OffsetMode == '-' || OffsetMode == 'Z' ) {
+		pTime->timeType = 2;
+		pTime->OffsetMode = OffsetMode;
+		pTime->OffsetHour = OffsetHour;
+		pTime->OffsetMinute = OffsetMinute;
+	} else if (pTime->timeType==0) {
+		pTime->timeType = 1;
+		pTime->OffsetMode = '\0';
+	}
+	*pLenStr = lenStr;
+
+finalize_it:
+	RETiRet;
+}
+
+void
+applyDfltTZ(struct syslogTime *pTime, char *tz)
+{
+	pTime->OffsetMode = tz[0];
+	pTime->OffsetHour = (tz[1] - '0') * 10 + (tz[2] - '0');
+	pTime->OffsetMinute = (tz[4] - '0') * 10 + (tz[5] - '0');
+
+}
+
 BEGINbeginCnfLoad
 CODESTARTbeginCnfLoad
 	loadModConf = pModConf;
@@ -293,7 +610,17 @@ ENDfreeInstance
 static inline void
 setInstParamDefaults(instanceData *pData)
 {
-	pData->fieldname[0] = '\0';
+	pData->srcField[0] = '\0';
+	pData->dstField[0] = '\0';
+}
+
+static inline void
+saveParamString(es_str_t* pPar, char* dst, es_size_t maxLen) {
+	char * tmpStr = es_str2cstr(pPar,NULL);
+	if (tmpStr != NULL) {
+		strncpy (dst, tmpStr, maxLen);
+		free(tmpStr);
+	}
 }
 
 BEGINnewActInst
@@ -313,14 +640,12 @@ CODESTARTnewActInst
 	for(i = 0 ; i < actpblk.nParams ; ++i) {
 		if(!pvals[i].bUsed)
 			continue;
-		if(!strcmp(actpblk.descr[i].name, "field")) {
-			char * tmpStr = es_str2cstr(pvals[i].val.d.estr,NULL);
-			if (tmpStr != NULL) {
-				strncpy (tmpStr, pData->fieldname, sizeof(pData->fieldname));
-				free(tmpStr);
-			}
+		if(!strcmp(actpblk.descr[i].name, "source")) {
+			saveParamString(pvals[i].val.d.estr, pData->srcField, sizeof(pData->srcField)-1);
+		} else if(!strcmp(actpblk.descr[i].name, "destination")) {
+			saveParamString(pvals[i].val.d.estr, pData->dstField, sizeof(pData->dstField)-1);
 		} else {
-			dbgprintf("mmadtformat: program error, non-handled "
+			dbgprintf("mmdtparse: program error, non-handled "
 			  "param '%s'\n", actpblk.descr[i].name);
 		}
 	}
@@ -348,40 +673,45 @@ BEGINdoAction
 	//int i;
 CODESTARTdoAction
 	pMsg = (msg_t*) ppString[0];
-	lenMsg = getMSGLen(pMsg);
-	msg = getMSG(pMsg);
+	//lenMsg = getMSGLen(pMsg);
+	//msg = getMSG(pMsg);
 	//for(i = 0 ; i < lenMsg ; ++i) {
 	//	anonip(pData, msg, &lenMsg, &i);
 	//}
 
-//	DBGPRINTF("before parser: timestamp type: %d\n",pMsg->tTIMESTAMP.timeType);
+	DBGPRINTF("before DTPARSE: source: %s\n",pData->srcField)
 //#define _KV_TSLEN 30
-//	char timestamp[_KV_TSLEN];
-//	json_object *dtfield, *tmfield;
-//	uchar *_pUnused = (uchar*)timestamp;
-//	int _iUnused= _KV_TSLEN;
-//	timestamp[0] = '\0';
-//	if (json_object_object_get_ex(my_root, "date", &dtfield)) {
-//		strncpy(timestamp, json_object_get_string(dtfield), _KV_TSLEN-2);
-//	}
-//	if (json_object_object_get_ex(my_root, "time", &tmfield)) {
-//		if (timestamp[0] != '\0')
-//			strcat(timestamp, "T" );
-//		strncat(timestamp, json_object_get_string(tmfield), _KV_TSLEN-1-strlen(timestamp));
-//	}
-//	DBGPRINTF("KV timestamp: %s\n",timestamp);
-//	json_object_object_add(my_root, "eventDate", json_object_new_string(timestamp));
-//	if (Parse_KV_TIMESTAMP(&(pMsg->tTIMESTAMP), &_pUnused, &_iUnused) == RS_RET_OK) {
-//		DBGPRINTF("after parser: timestamp type: %d\n",pMsg->tTIMESTAMP.timeType);
-//		if(pMsg->tTIMESTAMP.timeType==1 && pMsg->dfltTZ[0] != '\0') {
-//			DBGPRINTF("applied default TZ\n");
-//			applyDfltTZ(&pMsg->tTIMESTAMP, pMsg->dfltTZ);
-//		}
-//		DBGPRINTF("KV timestamp parsed\n");
-//	}
+	json_object *dst;
+	msgPropDescr_t cSource;
+	unsigned short bMustBeFreed=FALSE;
+	uchar *pVal=NULL;
 
-	if(lenMsg != getMSGLen(pMsg))
-		setMSGLen(pMsg, lenMsg);
+	if (pData->srcField[0]!='\0') {
+		CHKiRet(msgPropDescrFill(&cSource, (uchar*)pData->srcField, strlen(pData->srcField)));
+	} else {
+		CHKiRet(msgPropDescrFill(&cSource, (uchar*)"msg", 3));
+	}
+	pVal = (uchar*) MsgGetProp(pMsg, NULL, &cSource, &lenMsg, &bMustBeFreed, NULL);
+
+	DBGPRINTF("DTPARSE source timestamp: %s\n",pVal);
+	msg = pVal;
+	struct syslogTime *pRes = &(pMsg->tTIMESTAMP);
+	// TODO: manage destination field
+	if (ParseTIMESTAMP_loose(pRes, &msg, &lenMsg) == RS_RET_OK) {
+		DBGPRINTF("DTPARSE: loose-3339 timestamp parsed\n");
+	} else if (ParseTIMESTAMP_Apache(pRes, &msg, &lenMsg) == RS_RET_OK) {
+		DBGPRINTF("DTPARSE: apache timestamp parsed\n");
+	} else {
+		DBGPRINTF("DTPARSE: timestamp not parsed\n");
+	}
+	if(pRes->timeType==1 && pMsg->dfltTZ[0] != '\0') {
+		DBGPRINTF("DTPARSE: applied default TZ\n");
+		applyDfltTZ(pRes, pMsg->dfltTZ);
+	}
+
+finalize_it:
+	if (bMustBeFreed)
+		free(pVal);
 ENDdoAction
 
 
