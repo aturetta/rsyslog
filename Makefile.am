@@ -274,6 +274,10 @@ if ENABLE_PMKEYVALUE
 SUBDIRS += plugins/pmkeyvalue
 endif
 
+if ENABLE_MMDTPARSE
+SUBDIRS += plugins/mmdtparse
+endif
+
 if ENABLE_GUI
 SUBDIRS += java
 endif

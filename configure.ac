@@ -1335,6 +1335,19 @@ AC_ARG_ENABLE(pmkeyvalue,
 AM_CONDITIONAL(ENABLE_PMKEYVALUE, test x$enable_pmkeyvalue = xyes)
 
 
+# settings for mmdtparse
+AC_ARG_ENABLE(mmdtparse,
+        [AS_HELP_STRING([--enable-mmdtparse],[Compiles dtformat module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_mmdtparse="yes" ;;
+          no) enable_mmdtparse="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-mmdtparse) ;;
+         esac],
+        [enable_mmdtparse=no]
+)
+AM_CONDITIONAL(ENABLE_MMDTPARSE, test x$enable_mmdtparse = xyes)
+
+
 # settings for omruleset
 AC_ARG_ENABLE(omruleset,
         [AS_HELP_STRING([--enable-omruleset],[Compiles ruleset forwarding module @<:@default=no@:>@])],
@@ -1579,6 +1592,7 @@ AC_CONFIG_FILES([Makefile \
 		plugins/omjournal/Makefile \
 		plugins/pmrfc3164sd/Makefile \
 		plugins/pmkeyvalue/Makefile \
+		plugins/mmdtparse/Makefile \
 		plugins/pmlastmsg/Makefile \
 		plugins/pmcisconames/Makefile \
 		plugins/pmsnare/Makefile \
@@ -1686,6 +1700,7 @@ echo "    mmutf8fix enabled:                        $enable_mmutf8fix"
 echo "    mmrfc5424addhmac enabled:                 $enable_mmrfc5424addhmac"
 echo "    mmpstrucdata enabled:                     $enable_mmpstrucdata"
 echo "    mmsequence enabled:                       $enable_mmsequence"
+echo "    mmdtparse enabled:                        $enable_mmdtparse"
 echo
 echo "---{ strgen modules }---"
 echo "    sm_cust_bindcdr module will be compiled:  $enable_sm_cust_bindcdr"
