@@ -1,8 +1,5 @@
 /* pmkeyvalue.c
- * This is a parser module for RFC3164(legacy syslog)-formatted messages.
- *
- * NOTE: read comments in module-template.h to understand how this file
- *       works!
+ * This is a parser module for key-value-formatted messages.
  *
  * File begun on 2009-11-04 by RGerhards
  *
