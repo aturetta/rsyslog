@@ -920,6 +920,23 @@ fi
 AM_CONDITIONAL(ENABLE_MMNORMALIZE, test x$enable_mmnormalize = xyes)
 
 
+# mmnormalize1
+AC_ARG_ENABLE(mmnormalize1,
+        [AS_HELP_STRING([--enable-mmnormalize1],[Enable building mmnormalize (v8) support @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_mmnormalize1="yes" ;;
+          no) enable_mmnormalize1="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-mmnormalize1) ;;
+         esac],
+        [enable_mmnormalize1=no]
+)
+if test "x$enable_mmnormalize1" = "xyes"; then
+	PKG_CHECK_MODULES(LIBEE, libee >= 0.4.0)
+	PKG_CHECK_MODULES(LIBLOGNORM, lognorm >= 1.0.0)
+fi
+AM_CONDITIONAL(ENABLE_MMNORMALIZE1, test x$enable_mmnormalize1 = xyes)
+
+
 # mmnjsonparse
 AC_ARG_ENABLE(mmjsonparse,
         [AS_HELP_STRING([--enable-mmjsonparse],[Enable building mmjsonparse support @<:@default=no@:>@])],
@@ -1593,6 +1610,7 @@ AC_CONFIG_FILES([Makefile \
 		plugins/pmrfc3164sd/Makefile \
 		plugins/pmkeyvalue/Makefile \
 		plugins/mmdtparse/Makefile \
+		plugins/mmnormalize1/Makefile \
 		plugins/pmlastmsg/Makefile \
 		plugins/pmcisconames/Makefile \
 		plugins/pmsnare/Makefile \
@@ -1693,6 +1711,7 @@ echo "    pmkeyvalue module will be compiled:       $enable_pmkeyvalue"
 echo
 echo "---{ message modification modules }---"
 echo "    mmnormalize module will be compiled:      $enable_mmnormalize"
+echo "    mmnormalize module (v8) will be compiled: $enable_mmnormalize1"
 echo "    mmjsonparse module will be compiled:      $enable_mmjsonparse"
 echo "    mmjaduit module will be compiled:         $enable_mmaudit"
 echo "    mmsnmptrapd module will be compiled:      $enable_mmsnmptrapd"

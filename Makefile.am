@@ -278,6 +278,10 @@ if ENABLE_MMDTPARSE
 SUBDIRS += plugins/mmdtparse
 endif
 
+if ENABLE_MMNORMALIZE1
+SUBDIRS += plugins/mmnormalize1
+endif
+
 if ENABLE_GUI
 SUBDIRS += java
 endif
