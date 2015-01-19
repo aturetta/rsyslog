@@ -1308,6 +1308,32 @@ AC_ARG_ENABLE(pmsnare,
 AM_CONDITIONAL(ENABLE_PMSNARE, test x$enable_pmsnare = xyes)
 
 
+# settings for pmkeyvalue
+AC_ARG_ENABLE(pmkeyvalue,
+        [AS_HELP_STRING([--enable-pmkeyvalue],[Compiles keyvalue parser module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_pmkeyvalue="yes" ;;
+          no) enable_pmkeyvalue="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-pmkeyvalue) ;;
+         esac],
+        [enable_pmkeyvalue=no]
+)
+AM_CONDITIONAL(ENABLE_PMKEYVALUE, test x$enable_pmkeyvalue = xyes)
+
+
+# settings for mmdtparse
+AC_ARG_ENABLE(mmdtparse,
+        [AS_HELP_STRING([--enable-mmdtparse],[Compiles dtformat module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_mmdtparse="yes" ;;
+          no) enable_mmdtparse="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-mmdtparse) ;;
+         esac],
+        [enable_mmdtparse=no]
+)
+AM_CONDITIONAL(ENABLE_MMDTPARSE, test x$enable_mmdtparse = xyes)
+
+
 # settings for omruleset
 AC_ARG_ENABLE(omruleset,
         [AS_HELP_STRING([--enable-omruleset],[Compiles ruleset forwarding module @<:@default=no@:>@])],
@@ -1610,6 +1636,8 @@ AC_CONFIG_FILES([Makefile \
 		contrib/mmsequence/Makefile \
 		contrib/mmrfc5424addhmac/Makefile \
 		contrib/pmcisconames/Makefile \
+		contrib/pmkeyvalue/Makefile \
+		contrib/mmdtparse/Makefile \
 		tests/Makefile])
 AC_OUTPUT
 
@@ -1664,6 +1692,7 @@ echo "    pmcisconames module will be compiled:     $enable_pmcisconames"
 echo "    pmciscoios module will be compiled:       $enable_pmciscoios"
 echo "    pmaixforwardedfrom module w.be compiled:  $enable_pmaixforwardedfrom"
 echo "    pmsnare module will be compiled:          $enable_pmsnare"
+echo "    pmkeyvalue module will be compiled:       $enable_pmkeyvalue"
 echo
 echo "---{ message modification modules }---"
 echo "    mmnormalize module will be compiled:      $enable_mmnormalize"
@@ -1674,6 +1703,7 @@ echo "    mmutf8fix enabled:                        $enable_mmutf8fix"
 echo "    mmrfc5424addhmac enabled:                 $enable_mmrfc5424addhmac"
 echo "    mmpstrucdata enabled:                     $enable_mmpstrucdata"
 echo "    mmsequence enabled:                       $enable_mmsequence"
+echo "    mmdtparse enabled:                        $enable_mmdtparse"
 echo
 echo "---{ database support }---"
 echo "    MySql support enabled:                    $enable_mysql"

@@ -272,6 +272,14 @@ if ENABLE_MMRFC5424ADDHMAC
 SUBDIRS += contrib/mmrfc5424addhmac
 endif
 
+if ENABLE_PMKEYVALUE
+SUBDIRS += contrib/pmkeyvalue
+endif
+
+if ENABLE_MMDTPARSE
+SUBDIRS += contrib/mmdtparse
+endif
+
 # tests are added as last element, because tests may need different
 # modules that need to be generated first
 SUBDIRS += tests
