@@ -53,6 +53,10 @@ typedef struct _instanceData {
 	char dstField[CONF_HOSTNAME_MAXSIZE];
 } instanceData;
 
+typedef struct wrkrInstanceData {
+	instanceData *pData;
+} wrkrInstanceData_t;
+
 struct modConfData_s {
 	rsconf_t *pConf;	/* our overall config object */
 };
@@ -597,6 +601,11 @@ CODESTARTcreateInstance
 ENDcreateInstance
 
 
+BEGINcreateWrkrInstance
+CODESTARTcreateWrkrInstance
+ENDcreateWrkrInstance
+
+
 BEGINisCompatibleWithFeature
 CODESTARTisCompatibleWithFeature
 ENDisCompatibleWithFeature
@@ -605,6 +614,11 @@ ENDisCompatibleWithFeature
 BEGINfreeInstance
 CODESTARTfreeInstance
 ENDfreeInstance
+
+
+BEGINfreeWrkrInstance
+CODESTARTfreeWrkrInstance
+ENDfreeWrkrInstance
 
 
 static inline void
@@ -670,6 +684,7 @@ BEGINdoAction
 	msg_t *pMsg;
 	uchar *msg;
 	int lenMsg;
+	instanceData *pData = pWrkrData->pData;
 	//int i;
 CODESTARTdoAction
 	pMsg = (msg_t*) ppString[0];
@@ -738,6 +753,7 @@ BEGINqueryEtryPt
 CODESTARTqueryEtryPt
 CODEqueryEtryPt_STD_OMOD_QUERIES
 CODEqueryEtryPt_STD_CONF2_OMOD_QUERIES
+CODEqueryEtryPt_STD_OMOD8_QUERIES
 CODEqueryEtryPt_STD_CONF2_QUERIES
 ENDqueryEtryPt
 

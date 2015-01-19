@@ -307,7 +307,7 @@ CODESTARTparse
 	my_root = json_object_new_object();
 	parseKV(p2parse, lenMsg, my_root);
 
-	msgAddJSON(pMsg, (uchar*)"!", my_root);
+	msgAddJSON(pMsg, (uchar*)"!", my_root, 0);
 	iRet = RS_RET_OK;
 
 
