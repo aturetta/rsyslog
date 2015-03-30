@@ -36,22 +36,30 @@ TESTS +=  \
 	imtcp_conndrop_tls.sh \
 	imtcp_conndrop.sh \
 	imtcp_addtlframedelim.sh \
+	imtcp_no_octet_counted.sh \
+	imtcp_spframingfix.sh \
+	imptcp_spframingfix.sh \
 	sndrcv.sh \
 	sndrcv_failover.sh \
 	sndrcv_gzip.sh \
 	sndrcv_udp.sh \
 	sndrcv_udp_nonstdpt.sh \
+	sndrcv_udp_nonstdpt_v6.sh \
 	imudp_thread_hang.sh \
 	sndrcv_udp_nonstdpt_v6.sh \
 	asynwr_simple.sh \
+	asynwr_simple_2.sh \
 	asynwr_timeout.sh \
+	asynwr_timeout_2.sh \
 	asynwr_small.sh \
 	asynwr_tinybuf.sh \
 	wr_large_async.sh \
 	wr_large_sync.sh \
 	asynwr_deadlock.sh \
+	asynwr_deadlock_2.sh \
 	asynwr_deadlock2.sh \
 	asynwr_deadlock4.sh \
+	abort-uncleancfg-goodcfg.sh \
 	gzipwr_large.sh \
 	gzipwr_large_dynfile.sh \
 	dynfile_invld_async.sh \
@@ -152,6 +160,7 @@ TESTS +=  \
 	imptcp_large.sh \
 	imptcp_addtlframedelim.sh \
 	imptcp_conndrop.sh \
+	imptcp_no_octet_counted.sh \
         rscript_replace.sh \
         rscript_replace_complex.sh \
 	rscript_wrap2.sh \
@@ -491,6 +500,16 @@ EXTRA_DIST= 1.rstest 2.rstest 3.rstest err1.rstest \
 	   imptcp_conndrop-vg.sh \
 	   imptcp_conndrop.sh \
 	   testsuites/imptcp_conndrop.conf \
+	   imptcp_no_octet_counted.sh \
+	   testsuites/imptcp_no_octet_counted.conf \
+	   testsuites/no_octet_counted.testdata \
+	   imtcp_no_octet_counted.sh \
+	   testsuites/imtcp_no_octet_counted.conf \
+	   testsuites/spframingfix.testdata \
+	   imtcp_spframingfix.sh \
+	   testsuites/imtcp_spframingfix.conf \
+	   imptcp_spframingfix.sh \
+	   testsuites/imptcp_spframingfix.conf \
 	   imtcp_conndrop.sh \
 	   testsuites/imtcp_conndrop.conf \
 	   imtcp_conndrop_tls.sh \
@@ -584,8 +603,12 @@ EXTRA_DIST= 1.rstest 2.rstest 3.rstest err1.rstest \
 	   testsuites/uxsock_simple.conf \
 	   asynwr_simple.sh \
 	   testsuites/asynwr_simple.conf \
+	   asynwr_simple_2.sh \
+	   testsuites/asynwr_simple_2.conf \
 	   asynwr_timeout.sh \
 	   testsuites/asynwr_timeout.conf \
+	   asynwr_timeout_2.sh \
+	   testsuites/asynwr_timeout_2.conf \
 	   asynwr_small.sh \
 	   testsuites/asynwr_small.conf \
 	   asynwr_tinybuf.sh \
@@ -596,10 +619,14 @@ EXTRA_DIST= 1.rstest 2.rstest 3.rstest err1.rstest \
 	   testsuites/wr_large.conf \
 	   asynwr_deadlock.sh \
 	   testsuites/asynwr_deadlock.conf \
+	   asynwr_deadlock_2.sh \
+	   testsuites/asynwr_deadlock_2.conf \
 	   asynwr_deadlock2.sh \
 	   testsuites/asynwr_deadlock2.conf \
 	   asynwr_deadlock4.sh \
 	   testsuites/asynwr_deadlock4.conf \
+	   abort-uncleancfg-goodcfg.sh \
+	   testsuites/abort-uncleancfg-goodcfg.conf \
 	   gzipwr_large.sh \
 	   testsuites/gzipwr_large.conf \
 	   gzipwr_large_dynfile.sh \

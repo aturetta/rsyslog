@@ -4,7 +4,7 @@
  *
  * File begun on 2008-03-13 by RGerhards
  *
- * Copyright 2008-2014 Adiscon GmbH.
+ * Copyright 2008-2015 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -364,7 +364,7 @@ addListner(modConfData_t __attribute__((unused)) *modConf, instanceConf_t *inst)
 					"does not support it (most probably GnuTLS lib "
 					"is too old)!");
 			ABORT_FINALIZE(RS_RET_RELP_NO_TLS);
-		} else if(relpRet == RELP_RET_ERR_NO_TLS) {
+		} else if(relpRet == RELP_RET_ERR_NO_TLS_AUTH) {
 			errmsg.LogError(0, RS_RET_RELP_NO_TLS_AUTH,
 					"imrelp: could not activate relp TLS with "
 					"authentication, librelp does not support it "
@@ -419,10 +419,7 @@ BEGINnewInpInst
 CODESTARTnewInpInst
 	DBGPRINTF("newInpInst (imrelp)\n");
 
-	pvals = nvlstGetParams(lst, &inppblk, NULL);
-	if(pvals == NULL) {
-		errmsg.LogError(0, RS_RET_MISSING_CNFPARAMS,
-			        "imrelp: required parameter are missing\n");
+	if((pvals = nvlstGetParams(lst, &inppblk, NULL)) == NULL) {
 		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
 	}
 
@@ -540,7 +537,7 @@ CODESTARTendCnfLoad
 		}
 	} else {
 		if((cs.pszBindRuleset != NULL) && (cs.pszBindRuleset[0] != '\0')) {
-			errmsg.LogError(0, RS_RET_DUP_PARAM, "imrelp: warning: ruleset "
+			errmsg.LogError(0, RS_RET_DUP_PARAM, "imrelp: ruleset "
 					"set via legacy directive ignored");
 		}
 	}

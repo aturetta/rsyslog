@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([rsyslog],[8.7.0.1],[rsyslog@lists.adiscon.com])
+AC_INIT([rsyslog],[8.8.0],[rsyslog@lists.adiscon.com])
 AM_INIT_AUTOMAKE([subdir-objects])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -52,6 +52,11 @@ AC_CHECK_TYPES([json_bool],,,[[#include <json_object.h>]])
 CFLAGS="$save_CFLAGS"
 LIBS="$save_LIBS"
 
+AC_DEFINE_UNQUOTED([PLATFORM_ID], ["${host}"], [platform id for display purposes])
+# we don't mind if we don't have the lsb_release utility. But if we have, it's
+# nice to have the extra information.
+AC_DEFINE_UNQUOTED([PLATFORM_ID_LSB], ["`lsb_release -d`"], [platform id for display purposes])
+
 case "${host}" in
   *-*-linux*)
     AC_DEFINE([OS_LINUX], [1], [Indicator for a Linux OS])
@@ -70,6 +75,7 @@ case "${host}" in
     os_type="solaris"
     AC_DEFINE([OS_SOLARIS], [1], [Indicator for a Solaris OS])
     AC_DEFINE([_POSIX_PTHREAD_SEMANTICS], [1], [Use POSIX pthread semantics])
+    AC_DEFINE([_XOPEN_SOURCE], [600], [Use X/Open CAE Specification])
     SOL_LIBS="-lsocket -lnsl"
     # Solaris libuuid does not ship with a pkgconfig file so override the appropriate
     # variables (but only if they have not been set by the user).

@@ -4,7 +4,7 @@
  * File begun on 2007-12-21 by RGerhards (extracted from syslogd.c,
  * which at the time of the rsyslog fork was BSD-licensed)
  *
- * Copyright 2007-2013 Adiscon GmbH.
+ * Copyright 2007-2015 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -83,6 +83,7 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __a
 static tcpsrv_t *pOurTcpsrv = NULL;  /* our TCP server(listener) TODO: change for multiple instances */
 static permittedPeers_t *pPermPeersRoot = NULL;
 
+#define FRAMING_UNSET -1
 
 /* config settings */
 static struct configSettings_s {
@@ -109,6 +110,7 @@ struct instanceConf_s {
 	ruleset_t *pBindRuleset;	/* ruleset to bind listener to (use system default if unspecified) */
 	uchar *pszInputName;		/* value for inputname property, NULL is OK and handled by core engine */
 	uchar *dfltTZ;
+	sbool bSPFramingFix;
 	int ratelimitInterval;
 	int ratelimitBurst;
 	int bSuppOctetFram;
@@ -171,8 +173,9 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "name", eCmdHdlrString, 0 },
 	{ "defaulttz", eCmdHdlrString, 0 },
 	{ "ruleset", eCmdHdlrString, 0 },
-	{ "supportOctetCountedFraming", eCmdHdlrBinary, 0 },
+	{ "supportoctetcountedframing", eCmdHdlrBinary, 0 },
 	{ "ratelimit.interval", eCmdHdlrInt, 0 },
+	{ "framingfix.cisco.asa", eCmdHdlrBinary, 0 },
 	{ "ratelimit.burst", eCmdHdlrInt, 0 }
 };
 static struct cnfparamblk inppblk =
@@ -269,7 +272,8 @@ createInstance(instanceConf_t **pinst)
 	inst->pszBindRuleset = NULL;
 	inst->pszInputName = NULL;
 	inst->dfltTZ = NULL;
-	inst->bSuppOctetFram = 1;
+	inst->bSuppOctetFram = -1; /* unset */
+	inst->bSPFramingFix = 0;
 	inst->ratelimitInterval = 0;
 	inst->ratelimitBurst = 10000;
 
@@ -363,6 +367,7 @@ addListner(modConfData_t *modConf, instanceConf_t *inst)
 						UCHAR_CONSTANT("imtcp") : inst->pszInputName));
 	CHKiRet(tcpsrv.SetOrigin(pOurTcpsrv, (uchar*)"imtcp"));
 	CHKiRet(tcpsrv.SetDfltTZ(pOurTcpsrv, (inst->dfltTZ == NULL) ? (uchar*)"" : inst->dfltTZ));
+	CHKiRet(tcpsrv.SetbSPFramingFix(pOurTcpsrv, inst->bSPFramingFix));
 	CHKiRet(tcpsrv.SetLinuxLikeRatelimiters(pOurTcpsrv, inst->ratelimitInterval, inst->ratelimitBurst));
 	tcpsrv.configureTCPListen(pOurTcpsrv, inst->pszBindPort, inst->bSuppOctetFram);
 
@@ -404,9 +409,11 @@ CODESTARTnewInpInst
 			inst->pszInputName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(inppblk.descr[i].name, "defaulttz")) {
 			inst->dfltTZ = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else if(!strcmp(inppblk.descr[i].name, "framingfix.cisco.asa")) {
+			inst->bSPFramingFix = (int) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "ruleset")) {
 			inst->pszBindRuleset = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-		} else if(!strcmp(inppblk.descr[i].name, "supportOctetCountedFraming")) {
+		} else if(!strcmp(inppblk.descr[i].name, "supportoctetcountedframing")) {
 			inst->bSuppOctetFram = (int) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "ratelimit.burst")) {
 			inst->ratelimitBurst = (int) pvals[i].val.d.n;
@@ -563,6 +570,8 @@ BEGINcheckCnf
 CODESTARTcheckCnf
 	for(inst = pModConf->root ; inst != NULL ; inst = inst->next) {
 		std_checkRuleset(pModConf, inst);
+		if(inst->bSuppOctetFram == FRAMING_UNSET)
+			inst->bSuppOctetFram = pModConf->bSuppOctetFram;
 	}
 	if(pModConf->root == NULL) {
 		errmsg.LogError(0, RS_RET_NO_LISTNERS , "imtcp: module loaded, but "
