@@ -292,6 +292,8 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	char OffsetMode;	/* UTC offset + or - */
 	char OffsetHour;	/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
+	int secfrac;	/* fractional seconds (must be 32 bit!) */
+	int secfracPrecision;
 	/* end variables to temporarily hold time information while we parse */
 	int lenStr;
 	uchar *pszTS;
@@ -493,6 +495,17 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	if(second < 0 || second > 60)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 
+        /* Now let's see if we have secfrac */
+        if(lenStr > 0 && *pszTS == '.') {
+                --lenStr;
+                uchar *pszStart = ++pszTS;
+                secfrac = srSLMGParseInt32(&pszTS, &lenStr);
+                secfracPrecision = (int) (pszTS - pszStart);
+        } else {
+                secfracPrecision = 0;
+                secfrac = 0;
+        }
+
 	while((*pszTS == ' ' || *pszTS == 'T') && lenStr>0) {
 		--lenStr;
 		++pszTS;
@@ -546,8 +559,8 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	pTime->hour = hour;
 	pTime->minute = minute;
 	pTime->second = second;
- 	pTime->secfracPrecision = 0;
-	pTime->secfrac = 0;
+	pTime->secfrac = secfrac;
+	pTime->secfracPrecision = secfracPrecision;
 	if ( OffsetMode == '+' || OffsetMode == '-' || OffsetMode == 'Z' ) {
 		pTime->timeType = 2;
 		pTime->OffsetMode = OffsetMode;
@@ -684,9 +697,11 @@ BEGINdoAction
 	msg_t *pMsg;
 	uchar *msg;
 	int lenMsg;
+	int bSuccess;
 	instanceData *pData = pWrkrData->pData;
 	//int i;
 CODESTARTdoAction
+	bSuccess = 0;
 	pMsg = (msg_t*) ppString[0];
 	//lenMsg = getMSGLen(pMsg);
 	//msg = getMSG(pMsg);
@@ -714,8 +729,10 @@ CODESTARTdoAction
 	// TODO: manage destination field
 	if (ParseTIMESTAMP_loose(pRes, &msg, &lenMsg) == RS_RET_OK) {
 		DBGPRINTF("DTPARSE: loose-3339 timestamp parsed\n");
+		bSuccess = 1;
 	} else if (ParseTIMESTAMP_Apache(pRes, &msg, &lenMsg) == RS_RET_OK) {
 		DBGPRINTF("DTPARSE: apache timestamp parsed\n");
+		bSuccess = 1;
 	} else {
 		DBGPRINTF("DTPARSE: timestamp not parsed\n");
 	}
@@ -725,6 +742,7 @@ CODESTARTdoAction
 	}
 
 finalize_it:
+	MsgSetParseSuccess(pMsg, bSuccess);
 	if (bMustBeFreed)
 		free(pVal);
 ENDdoAction
