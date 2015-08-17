@@ -42,6 +42,12 @@ MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
 MODULE_CNFNAME("mmdtparse")
 
+//#define EXTRADEBUG 1
+#if defined(EXTRADEBUG)
+    #define EXTRADBGPRINTF(...) DBGPRINTF(__VA_ARGS__)
+#else
+    #define EXTRADBGPRINTF(...) {}
+#endif
 
 DEFobjCurrIf(errmsg);
 DEF_OMOD_STATIC_DATA
@@ -184,7 +190,7 @@ ParseTIMESTAMP_loose(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	if(second < 0 || second > 60)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
  
-        //DBGPRINTF("DATE & TIME PARSED\n");
+	EXTRADBGPRINTF("DATE & TIME PARSED\n");
 	/* Now let's see if we have secfrac */
 	if(lenStr > 0 && *pszTS == '.') {
 		--lenStr;
@@ -290,7 +296,7 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	int minute;
 	int second;
 	char OffsetMode;	/* UTC offset + or - */
-	char OffsetHour;	/* UTC offset in hours */
+	int OffsetHour;	/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
 	int secfrac;	/* fractional seconds (must be 32 bit!) */
 	int secfracPrecision;
@@ -322,7 +328,7 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 	--lenStr;
 
-	//DBGPRINTF("DTPARSE: day parsed %d\n",day);
+	EXTRADBGPRINTF("DTPARSE: day parsed %d\n",day);
 	/* If we look at the month (Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec),
 	 * we may see the following character sequences occur:
 	 *
@@ -460,14 +466,14 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 
 	lenStr -= 3;
 
-	//DBGPRINTF("DTPARSE: month parsed %d\n",month);
+	EXTRADBGPRINTF("DTPARSE: month parsed %d\n",month);
 	/* done month */
 
 	if(lenStr == 0 || *pszTS++ != '/')
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 	--lenStr;
 	year = srSLMGParseInt32(&pszTS, &lenStr);
-	//DBGPRINTF("DTPARSE: year parsed %d\n",year);
+	EXTRADBGPRINTF("DTPARSE: year parsed %d\n",year);
 
 	/* hour part */
 	if(lenStr == 0 || *pszTS++ != ':')
@@ -475,7 +481,7 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	--lenStr;
 	hour = srSLMGParseInt32(&pszTS, &lenStr);
 
-	//DBGPRINTF("DTPARSE: hour parsed %d\n",hour);
+	EXTRADBGPRINTF("DTPARSE: hour parsed %d\n",hour);
 	if(hour < 0 || hour > 23)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 
@@ -483,7 +489,7 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 	--lenStr;
 	minute = srSLMGParseInt32(&pszTS, &lenStr);
-	//DBGPRINTF("DTPARSE: minute parsed %d\n",minute);
+	EXTRADBGPRINTF("DTPARSE: minute parsed %d\n",minute);
 	if(minute < 0 || minute > 59)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 
@@ -491,21 +497,24 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 	--lenStr;
 	second = srSLMGParseInt32(&pszTS, &lenStr);
-	//DBGPRINTF("DTPARSE: second parsed %d\n",second);
+	EXTRADBGPRINTF("DTPARSE: second parsed %d\n",second);
 	if(second < 0 || second > 60)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 
-        /* Now let's see if we have secfrac */
-        if(lenStr > 0 && *pszTS == '.') {
-                --lenStr;
-                uchar *pszStart = ++pszTS;
-                secfrac = srSLMGParseInt32(&pszTS, &lenStr);
-                secfracPrecision = (int) (pszTS - pszStart);
-        } else {
-                secfracPrecision = 0;
-                secfrac = 0;
-        }
+	/* Now let's see if we have secfrac */
+	if(lenStr > 0 && *pszTS == '.') {
+		--lenStr;
+		uchar *pszStart = ++pszTS;
+		secfrac = srSLMGParseInt32(&pszTS, &lenStr);
+		secfracPrecision = (int) (pszTS - pszStart);
+		EXTRADBGPRINTF("DTPARSE: secfrac parsed %d(%d)\n",secfrac,secfracPrecision);
+	} else {
+		secfracPrecision = 0;
+		secfrac = 0;
+		EXTRADBGPRINTF("DTPARSE: secfrac not present\n");
+	}
 
+	EXTRADBGPRINTF("DTPARSE: remain:%s\n",pszTS);
 	while((*pszTS == ' ' || *pszTS == 'T') && lenStr>0) {
 		--lenStr;
 		++pszTS;
@@ -525,8 +534,9 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 		--lenStr;
 		pszTS++;
 
+		EXTRADBGPRINTF("DTPARSE: remain:%s\n",pszTS);
 		OffsetHour = srSLMGParseInt32(&pszTS, &lenStr);
-		//DBGPRINTF("DTPARSE: offset hour parsed %d\n",OffsetHour);
+		EXTRADBGPRINTF("DTPARSE: offset hour parsed %d\n",OffsetHour);
 		if(OffsetHour < 0 || (OffsetHour > 23 && OffsetHour<30))
 			ABORT_FINALIZE(RS_RET_INVLD_TIME);
 		if(OffsetHour >=30) {
@@ -538,7 +548,7 @@ ParseTIMESTAMP_Apache(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 				pszTS++;
 			}
 			OffsetMinute = srSLMGParseInt32(&pszTS, &lenStr);
-			//DBGPRINTF("DTPARSE: offset minute parsed %d\n",OffsetMinute);
+			EXTRADBGPRINTF("DTPARSE: offset minute parsed %d\n",OffsetMinute);
 		}
 		if(OffsetMinute < 0 || OffsetMinute > 59)
 			ABORT_FINALIZE(RS_RET_INVLD_TIME);
@@ -711,7 +721,7 @@ CODESTARTdoAction
 
 	DBGPRINTF("before DTPARSE: source: %s\n",pData->srcField)
 //#define _KV_TSLEN 30
-	json_object *dst;
+	//json_object *dst;
 	msgPropDescr_t cSource;
 	unsigned short bMustBeFreed=FALSE;
 	uchar *pVal=NULL;
