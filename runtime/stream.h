@@ -65,6 +65,7 @@
 #ifndef STREAM_H_INCLUDED
 #define STREAM_H_INCLUDED
 
+#include <regex.h> // TODO: fix via own module
 #include <pthread.h>
 #include <stdint.h>
 #include "obj-types.h"
@@ -106,6 +107,7 @@ typedef struct strm_s {
 	sbool bDeleteOnClose; /* set to 1 to auto-delete on close -- be careful with that setting! */
 	int64 iCurrOffs;/* current offset */
 	int64 *pUsrWCntr; /* NULL or a user-provided counter that receives the nbr of bytes written since the last CntrSet() */
+	sbool bPrevWasNL; /* used for readLine() when reading multi-line messages */
 	/* dynamic properties, valid only during file open, not to be persistet */
 	sbool bDisabled; /* should file no longer be written to? (currently set only if omfile file size limit fails) */
 	sbool bSync;	/* sync this file after every write? */
@@ -150,7 +152,8 @@ typedef struct strm_s {
 	off_t	iSizeLimit;	/* file size limit, 0 = no limit */
 	uchar	*pszSizeLimitCmd;	/* command to carry out when size limit is reached */
 	sbool	bIsTTY;		/* is this a tty file? */
-	cstr_t *prevLineSegment; /* for ReadLine, previous, unwritten part of file */
+	cstr_t *prevLineSegment; /* for ReadLine, previous, unprocessed part of file */
+	cstr_t *prevMsgSegment; /* for ReadMultiLine, previous, yet unprocessed part of msg */
 } strm_t;
 
 
@@ -209,5 +212,6 @@ strmGetCurrFileNum(strm_t *pStrm) {
 /* prototypes */
 PROTOTYPEObjClassInit(strm);
 rsRetVal strmMultiFileSeek(strm_t *pThis, int fileNum, off64_t offs, off64_t *bytesDel);
+rsRetVal strmReadMultiLine(strm_t *pThis, cstr_t **ppCStr, regex_t *preg, sbool bEscapeLF);
 
 #endif /* #ifndef STREAM_H_INCLUDED */

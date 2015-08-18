@@ -49,6 +49,7 @@ struct action_s {
 	sbool	bHadAutoCommit;	/* did an auto-commit happen during doAction()? */
 	sbool	bDisabled;
 	sbool	isTransactional;
+	sbool	bCopyMsg;
 	int	iSecsExecOnceInterval; /* if non-zero, minimum seconds to wait until action is executed again */
 	time_t	ttResumeRtry;	/* when is it time to retry the resume? */
 	int	iResumeInterval;/* resume interval for this action */
@@ -72,6 +73,10 @@ struct action_s {
 	pthread_mutex_t mutAction; /* primary action mutex */
 	uchar *pszName;		/* action name */
 	DEF_ATOMIC_HELPER_MUT(mutCAS)
+	/* for per-worker HUP processing */
+	void **wrkrDataTable;
+	int wrkrDataTableSize;
+	int nWrkr;
 	/* for statistics subsystem */
 	statsobj_t *statsobj;
 	STATSCOUNTER_DEF(ctrProcessed, mutCtrProcessed)
@@ -98,6 +103,7 @@ rsRetVal activateActions(void);
 rsRetVal actionNewInst(struct nvlst *lst, action_t **ppAction);
 rsRetVal actionProcessCnf(struct cnfobj *o);
 void actionCommitAllDirect(wti_t *pWti);
+void actionRemoveWorker(action_t *const pAction, void *const actWrkrData);
 
 /* external data */
 extern int iActionNbr;

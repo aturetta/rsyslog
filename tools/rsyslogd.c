@@ -211,7 +211,7 @@ rsRetVal checkStartupOK(void)
 			"If you want to run multiple instances of rsyslog, you need "
 			"to specify\n"
 			"different pid files for them (-i option).\n",
-			PidFile, getpid());
+			PidFile, (int) getpid());
 		ABORT_FINALIZE(RS_RET_ERR);
 	}
 
@@ -252,7 +252,7 @@ prepareBackground(const int parentPipeFD)
 			const int lstnPidI = atoi(lstnPid);
 			snprintf(szBuf, sizeof(szBuf), "%d", lstnPidI);
 			if(!strcmp(szBuf, lstnPid) && lstnPidI == getppid()) {
-				snprintf(szBuf, sizeof(szBuf), "%d", getpid());
+				snprintf(szBuf, sizeof(szBuf), "%d", (int) getpid());
 				setenv("LISTEN_PID", szBuf, 1);
 				/* ensure we do not close what systemd provided */
 				const int nFds = sd_listen_fds(0);
@@ -1115,26 +1115,26 @@ initAll(int argc, char **argv)
 		switch((char)ch) {
                 case '4':
 			fprintf (stderr, "rsyslogd: the -4 command line option will go away "
-				 "soon.\nPlease use the global(net.ipproto=\"ipv4-only\") "
+				 "soon.\nPlease use the global(net.ipprotocol=\"ipv4-only\") "
 				 "configuration parameter instead.\n");
 	                glbl.SetDefPFFamily(PF_INET);
                         break;
                 case '6':
-			fprintf (stderr, "rsyslogd: the -4 command line option will go away "
-				 "soon.\nPlease use the global(net.ipproto=\"ipv6-only\") "
+			fprintf (stderr, "rsyslogd: the -6 command line option will go away "
+				 "soon.\nPlease use the global(net.ipprotocol=\"ipv6-only\") "
 				 "configuration parameter instead.\n");
                         glbl.SetDefPFFamily(PF_INET6);
                         break;
                 case 'A':
 			fprintf (stderr, "rsyslogd: the -A command line option will go away "
 				 "soon.\n"
-				 "Please use the omfwd paramter \"upd.sendToAll\" instead.\n");
+				 "Please use the omfwd parameter \"upd.sendToAll\" instead.\n");
                         send_to_all++;
                         break;
 		case 'S':		/* Source IP for local client to be used on multihomed host */
 			fprintf (stderr, "rsyslogd: the -S command line option will go away "
 				 "soon.\n"
-				 "Please use the omrelp paramter \"localClientIP\" instead.\n");
+				 "Please use the omrelp parameter \"localClientIP\" instead.\n");
 			if(glbl.GetSourceIPofLocalClient() != NULL) {
 				fprintf (stderr, "rsyslogd: Only one -S argument allowed, the first one is taken.\n");
 			} else {
@@ -1599,6 +1599,7 @@ deinitAll(void)
 	ratelimitModExit();
 	dnscacheDeinit();
 	thrdExit();
+	objRelease(net, LM_NET_FILENAME);
 
 	module.UnloadAndDestructAll(eMOD_LINK_ALL);
 

@@ -188,7 +188,8 @@ static struct cnfparamdescr cnfparamdescr[] = {
 	{ "action.resumeretrycount", eCmdHdlrInt, 0 }, /* legacy: actionresumeretrycount */
 	{ "action.reportsuspension", eCmdHdlrBinary, 0 },
 	{ "action.reportsuspensioncontinuation", eCmdHdlrBinary, 0 },
-	{ "action.resumeinterval", eCmdHdlrInt, 0 }
+	{ "action.resumeinterval", eCmdHdlrInt, 0 },
+	{ "action.copymsg", eCmdHdlrBinary, 0 }
 };
 static struct cnfparamblk pblk =
 	{ CNFPARAMBLK_VERSION,
@@ -308,6 +309,7 @@ rsRetVal actionDestruct(action_t * const pThis)
 	d_free(pThis->pszName);
 	d_free(pThis->ppTpl);
 	d_free(pThis->peParamPassing);
+	d_free(pThis->wrkrDataTable);
 
 finalize_it:
 	d_free(pThis);
@@ -354,6 +356,7 @@ rsRetVal actionConstruct(action_t **ppThis)
 	pThis->isTransactional = 0;
 	pThis->bReportSuspension = -1; /* indicate "not yet set" */
 	pThis->bReportSuspensionCont = -1; /* indicate "not yet set" */
+	pThis->bCopyMsg = 0;
 	pThis->tLastOccur = datetime.GetTime(NULL);	/* done once per action on startup only */
 	pThis->iActionNbr = iActionNbr;
 	pthread_mutex_init(&pThis->mutAction, NULL);
@@ -382,7 +385,7 @@ actionConstructFinalize(action_t *__restrict__ const pThis, struct nvlst *lst)
 	}
 	/* generate a friendly name for us action stats */
 	if(pThis->pszName == NULL) {
-		snprintf((char*) pszAName, sizeof(pszAName)/sizeof(uchar), "action %d", iActionNbr);
+		snprintf((char*) pszAName, sizeof(pszAName)/sizeof(uchar), "action %d", pThis->iActionNbr);
 		pThis->pszName = ustrdup(pszAName);
 	}
 
@@ -394,7 +397,7 @@ actionConstructFinalize(action_t *__restrict__ const pThis, struct nvlst *lst)
 			if(pThis->peParamPassing[i] != ACT_STRING_PASSING) {
 				errmsg.LogError(0, RS_RET_INVLD_OMOD, "action '%s'(%d) is transactional but "
 						"parameter %d "
-						"uses invalid paramter passing mode -- disabling "
+						"uses invalid parameter passing mode -- disabling "
 						"action. This is probably caused by a pre-v7 "
 						"output module that needs upgrade.",
 						pThis->pszName, pThis->iActionNbr, i);
@@ -772,6 +775,24 @@ actionCheckAndCreateWrkrInstance(action_t * const pThis, wti_t * const pWti)
 						               pThis->pModData));
 		pWti->actWrkrInfo[pThis->iActionNbr].pAction = pThis;
 		setActionState(pWti, pThis, ACT_STATE_RDY); /* action is enabled */
+		
+		/* maintain worker data table -- only needed if wrkrHUP is requested! */
+
+		int freeSpot;
+		for(freeSpot = 0 ; freeSpot < pThis->wrkrDataTableSize ; ++freeSpot)
+			if(pThis->wrkrDataTable[freeSpot] == NULL)
+				break;
+		if(pThis->nWrkr == pThis->wrkrDataTableSize) {
+			// TODO: check realloc, fall back to old table if it fails. Better than nothing...
+			pThis->wrkrDataTable = realloc(pThis->wrkrDataTable,
+				(pThis->wrkrDataTableSize + 1) * sizeof(void*));
+			pThis->wrkrDataTableSize++;
+		}
+dbgprintf("DDDD: writing data to table spot %d\n", freeSpot);
+		pThis->wrkrDataTable[freeSpot] = pWti->actWrkrInfo[pThis->iActionNbr].actWrkrData;
+		pThis->nWrkr++;
+		DBGPRINTF("wti %p: created action worker instance %d for "
+			  "action %d\n", pWti, pThis->nWrkr, pThis->iActionNbr);
 	}
 finalize_it:
 	RETiRet;
@@ -1183,7 +1204,6 @@ actionTryCommit(action_t *__restrict__ const pThis, wti_t *__restrict__ const pW
 	iRet = getReturnCode(pThis, pWti);
 
 finalize_it:
-	pWti->actWrkrInfo[pThis->iActionNbr].p.tx.currIParam = 0; /* reset to beginning */
 	RETiRet;
 }
 
@@ -1235,6 +1255,7 @@ actionCommit(action_t *__restrict__ const pThis, wti_t *__restrict__ const pWti)
 		}
 	} while(!bDone);
 finalize_it:
+	pWti->actWrkrInfo[pThis->iActionNbr].p.tx.currIParam = 0; /* reset to beginning */
 	RETiRet;
 }
 
@@ -1270,17 +1291,11 @@ processMsgMain(action_t *__restrict__ const pAction,
 {
 	DEFiRet;
 
-	if(pAction->bExecWhenPrevSusp && !pWti->execState.bPrevWasSuspended) {
-		DBGPRINTF("action %d: NOT executing, as previous action was "
-			  "not suspended\n", pAction->iActionNbr);
-		FINALIZE;
-	}
-
 	iRet = prepareDoActionParams(pAction, pWti, pMsg, ttNow);
 
 	if(pAction->isTransactional) {
 		pWti->actWrkrInfo[pAction->iActionNbr].pAction = pAction;
-		DBGPRINTF("action %d is transactional - executing in commit phase\n", pAction->iActionNbr);
+		DBGPRINTF("action '%s': is transactional - executing in commit phase\n", pAction->pszName);
 		actionPrepare(pAction, pWti);
 		iRet = getReturnCode(pAction, pWti);
 		FINALIZE;
@@ -1296,7 +1311,6 @@ finalize_it:
 		if(pWti->execState.bDoAutoCommit)
 			iRet = actionCommit(pAction, pWti);
 	}
-	pWti->execState.bPrevWasSuspended = (iRet == RS_RET_SUSPENDED || iRet == RS_RET_ACTION_FAILED);
 	RETiRet;
 }
 
@@ -1328,6 +1342,23 @@ processBatchMain(void *__restrict__ const pVoid,
 }
 
 
+/* remove an action worker instance from our table of
+ * workers. To be called from worker handler (wti).
+ */
+void
+actionRemoveWorker(action_t *const __restrict__ pAction,
+	void *const __restrict__ actWrkrData)
+{
+	pAction->nWrkr--;
+	for(int w = 0 ; w < pAction->wrkrDataTableSize ; ++w) {
+		if(pAction->wrkrDataTable[w] == actWrkrData) {
+			pAction->wrkrDataTable[w] = NULL;
+			break; /* done */
+		}
+	}
+}
+
+
 /* call the HUP handler for a given action, if such a handler is defined.
  * Note that the action must be able to service HUP requests concurrently
  * to any current doAction() processing.
@@ -1338,10 +1369,22 @@ actionCallHUPHdlr(action_t * const pAction)
 	DEFiRet;
 
 	ASSERT(pAction != NULL);
-	DBGPRINTF("Action %p checks HUP hdlr: %p\n", pAction, pAction->pMod->doHUP);
+	DBGPRINTF("Action %p checks HUP hdlr, act level: %p, wrkr level %p\n",
+		pAction, pAction->pMod->doHUP, pAction->pMod->doHUPWrkr);
 
 	if(pAction->pMod->doHUP != NULL) {
 		CHKiRet(pAction->pMod->doHUP(pAction->pModData));
+	}
+
+	if(pAction->pMod->doHUPWrkr != NULL) {
+		for(int i = 0 ; i < pAction->wrkrDataTableSize ; ++i) {
+			dbgprintf("HUP: table entry %d: %p %s\n", i,
+				pAction->wrkrDataTable[i],
+				pAction->wrkrDataTable[i] == NULL ? "[unused]" : "");
+			if(pAction->wrkrDataTable[i] != NULL) {
+				CHKiRet(pAction->pMod->doHUPWrkr(pAction->wrkrDataTable[i]));
+			}
+		}
 	}
 
 finalize_it:
@@ -1391,7 +1434,17 @@ doSubmitToActionQ(action_t * const pAction, wti_t * const pWti, msg_t *pMsg)
 	struct syslogTime ttNow; // TODO: think if we can buffer this in pWti
 	DEFiRet;
 
-	DBGPRINTF("Called action, logging to %s\n", module.GetStateName(pAction->pMod));
+	DBGPRINTF("action '%s': called, logging to %s (susp %d/%d, direct q %d)\n",
+		pAction->pszName, module.GetStateName(pAction->pMod),
+		pAction->bExecWhenPrevSusp, pWti->execState.bPrevWasSuspended,
+		pAction->pQueue->qType == QUEUETYPE_DIRECT);
+
+	if(   pAction->bExecWhenPrevSusp
+	   && !pWti->execState.bPrevWasSuspended) {
+		DBGPRINTF("action '%s': NOT executing, as previous action was "
+			  "not suspended\n", pAction->pszName);
+		FINALIZE;
+	}
 
 	STATSCOUNTER_INC(pAction->ctrProcessed, pAction->mutCtrProcessed);
 	if(pAction->pQueue->qType == QUEUETYPE_DIRECT) {
@@ -1400,9 +1453,19 @@ doSubmitToActionQ(action_t * const pAction, wti_t * const pWti, msg_t *pMsg)
 	} else {/* in this case, we do single submits to the queue. 
 		 * TODO: optimize this, we may do at least a multi-submit!
 		 */
-		iRet = qqueueEnqMsg(pAction->pQueue, eFLOWCTL_NO_DELAY, MsgAddRef(pMsg));
+		iRet = qqueueEnqMsg(pAction->pQueue, eFLOWCTL_NO_DELAY,
+			pAction->bCopyMsg ? MsgDup(pMsg) : MsgAddRef(pMsg));
 	}
+	pWti->execState.bPrevWasSuspended
+		= (iRet == RS_RET_SUSPENDED || iRet == RS_RET_ACTION_FAILED);
 
+	if (iRet == RS_RET_ACTION_FAILED)	/* Increment failed counter */
+		STATSCOUNTER_INC(pAction->ctrFail, pAction->mutCtrFail);
+
+	DBGPRINTF("action '%s': set suspended state to %d\n",
+		pAction->pszName, pWti->execState.bPrevWasSuspended);
+
+finalize_it:
 	RETiRet;
 }
 
@@ -1628,6 +1691,8 @@ actionApplyCnfParam(action_t * const pAction, struct cnfparamvals * const pvals)
 			pAction->bReportSuspension = (int) pvals[i].val.d.n;
 		} else if(!strcmp(pblk.descr[i].name, "action.reportsuspensioncontinuation")) {
 			pAction->bReportSuspensionCont = (int) pvals[i].val.d.n;
+		} else if(!strcmp(pblk.descr[i].name, "action.copymsg")) {
+			pAction->bCopyMsg = (int) pvals[i].val.d.n;
 		} else if(!strcmp(pblk.descr[i].name, "action.resumeinterval")) {
 			pAction->iResumeInterval = pvals[i].val.d.n;
 		} else {

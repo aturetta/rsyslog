@@ -11,7 +11,7 @@
  *
  * Module begun 2009-06-10 by Rainer Gerhards
  *
- * Copyright 2009-2014 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2009-2015 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -107,6 +107,11 @@ scriptIterateAllActions(struct cnfstmt *root, rsRetVal (*pFunc)(void*, void*), v
 			if(stmt->d.s_if.t_else != NULL)
 				scriptIterateAllActions(stmt->d.s_if.t_else,
 							pFunc, pParam);
+			break;
+        case S_FOREACH:
+			if(stmt->d.s_foreach.body != NULL)
+				scriptIterateAllActions(stmt->d.s_foreach.body,
+                                        pFunc, pParam);
 			break;
 		case S_PRIFILT:
 			if(stmt->d.s_prifilt.t_then != NULL)
@@ -266,11 +271,11 @@ finalize_it:
 static rsRetVal
 execForeach(struct cnfstmt *stmt, msg_t *pMsg, wti_t *pWti)
 {
-	json_object *arr;
+	json_object *arr = NULL;
 	DEFiRet;
 	arr = cnfexprEvalCollection(stmt->d.s_foreach.iter->collection, pMsg);
-	if (arr == NULL) {
-		DBGPRINTF("foreach loop skipped, as collection is empty\n");
+	if (arr == NULL || !json_object_is_type(arr, json_type_array)) {
+		DBGPRINTF("foreach loop skipped, as object to iterate upon is either empty or not an array\n");
 		FINALIZE;
 	}
 	int len = json_object_array_length(arr);
@@ -283,8 +288,9 @@ execForeach(struct cnfstmt *stmt, msg_t *pMsg, wti_t *pWti)
 		CHKiRet(msgSetJSONFromVar(pMsg, (uchar*)stmt->d.s_foreach.iter->var, &v, 1));
 		CHKiRet(scriptExec(stmt->d.s_foreach.body, pMsg, pWti));
 	}
-	CHKiRet(msgDelJSON(pMsg, stmt->d.s_foreach.iter->var));
+	CHKiRet(msgDelJSON(pMsg, (uchar*)stmt->d.s_foreach.iter->var));
 finalize_it:
+	if (arr != NULL) json_object_put(arr);
 	RETiRet;
 }
 

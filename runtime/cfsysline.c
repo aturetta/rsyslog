@@ -161,7 +161,7 @@ finalize_it:
  * param value must be int64!
  * rgerhards, 2008-01-09
  */
-static rsRetVal doGetSize(uchar **pp, rsRetVal (*pSetHdlr)(void*, uid_t), void *pVal)
+static rsRetVal doGetSize(uchar **pp, rsRetVal (*pSetHdlr)(void*, int64), void *pVal)
 {
 	DEFiRet;
 	int64 i;
@@ -216,7 +216,6 @@ static rsRetVal doGetInt(uchar **pp, rsRetVal (*pSetHdlr)(void*, uid_t), void *p
 	uchar *p;
 	DEFiRet;
 	int64 i;	
-	uchar errMsg[256];	/* for dynamic error messages */
 
 	assert(pp != NULL);
 	assert(*pp != NULL);
@@ -260,7 +259,6 @@ static rsRetVal doFileCreateMode(uchar **pp, rsRetVal (*pSetHdlr)(void*, uid_t),
 {
 	uchar *p;
 	DEFiRet;
-	uchar errMsg[128];	/* for dynamic error messages */
 	int iVal;	
 
 	assert(pp != NULL);
@@ -839,7 +837,7 @@ finalize_it:
  * Parameter permitted has been added to support the v2 config system. With it,
  * we can tell the legacy system (us here!) to check if a config directive is
  * still permitted. For example, the v2 system will disable module global
- * paramters if the are supplied via the native v2 callbacks. In order not
+ * parameters if the are supplied via the native v2 callbacks. In order not
  * to break exisiting modules, we have renamed the rgCfSysLinHdlr routine to
  * version 2 and added a new one with the original name. It just calls the
  * v2 function and supplies a "don't care (NULL)" pointer as this argument.
@@ -938,6 +936,11 @@ rsRetVal unregCfSysLineHdlrs4Owner(void *pOwnerCookie)
 	 * class does not provide a way to just search the lower-level handlers.
 	 */
 	iRet = llExecFunc(&llCmdList, unregHdlrsHeadExec, pOwnerCookie);
+	if(iRet == RS_RET_NOT_FOUND) {
+		/* It is not considered an error if a module had no
+		   hanlers registered. */
+		iRet = RS_RET_OK;
+	}
 
 	RETiRet;
 }
