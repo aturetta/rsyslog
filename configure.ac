@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([rsyslog],[8.12.0],[rsyslog@lists.adiscon.com])
+AC_INIT([rsyslog],[8.13.0.master],[rsyslog@lists.adiscon.com])
 AM_INIT_AUTOMAKE([subdir-objects])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -763,18 +763,13 @@ AC_ARG_ENABLE(gnutls,
 if test "x$enable_gnutls" = "xyes"; then
 	PKG_CHECK_MODULES(GNUTLS, gnutls >= 1.4.0)
 	AC_DEFINE([ENABLE_GNUTLS], [1], [Indicator that GnuTLS is present])
-	AC_CHECK_LIB(
-	    [gnutls],
-	    [gnutls_global_init],
-	    [
-	     AC_DEFINE(HAVE_LIB_GNUTLS, 1, [gnutls is available])
-	    ],
-	    [AC_MSG_WARN([gnutls_global_init function missing or not detected])],
-	    []
-	)
+	save_libs=$LIBS
+	LIBS="$LIBS $GNUTLS_LIBS"
 	AC_CHECK_FUNCS(gnutls_certificate_set_retrieve_function,,)
 	AC_CHECK_FUNCS(gnutls_certificate_type_set_priority,,)
+	LIBS=$save_libs
 fi
+
 AM_CONDITIONAL(ENABLE_GNUTLS, test x$enable_gnutls = xyes)
 
 # libgcrypt support
@@ -932,7 +927,7 @@ AC_ARG_ENABLE(mmnormalize,
         [enable_mmnormalize=no]
 )
 if test "x$enable_mmnormalize" = "xyes"; then
-	PKG_CHECK_MODULES(LIBLOGNORM, lognorm >= 1.0.2)
+	PKG_CHECK_MODULES(LIBLOGNORM, lognorm >= 1.1.2)
 
 	save_CFLAGS="$CFLAGS"
 	save_LIBS="$LIBS"
@@ -1680,7 +1675,6 @@ if test "x$in_git_src" = "xyes"; then
 else
         AC_MSG_NOTICE([Not running from git source])
 fi
-
 
 AM_CONDITIONAL(ENABLE_GENERATE_MAN_PAGES, test x$have_to_generate_man_pages = xyes)
 
