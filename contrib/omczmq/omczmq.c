@@ -60,6 +60,7 @@ typedef struct _instanceData {
 	uchar *tplName;
 	char *beacon;
 	int beaconport;
+	char *topicList;
 } instanceData;
 
 typedef struct wrkrInstanceData {
@@ -74,7 +75,8 @@ static struct cnfparamdescr actpdescr[] = {
 	{ "authtype", eCmdHdlrGetWord, 0 },
 	{ "clientcertpath", eCmdHdlrGetWord, 0 },
 	{ "servercertpath", eCmdHdlrGetWord, 0 },
-	{ "template", eCmdHdlrGetWord, 0 }
+	{ "template", eCmdHdlrGetWord, 0 },
+	{ "topics", eCmdHdlrGetWord, 0 }
 };
 
 static struct cnfparamblk actpblk = {
@@ -136,7 +138,7 @@ static rsRetVal initCZMQ(instanceData* pData) {
 	}
 
 	/* if we are a CURVE server */
-	if (!strcmp(pData->authType, "CURVESERVER")) {
+	if ((pData->authType != NULL) && (!strcmp(pData->authType, "CURVESERVER"))) {
 		DBGPRINTF("omczmq: we are a curve server...\n");
 		
 		is_server = true;
@@ -164,7 +166,7 @@ static rsRetVal initCZMQ(instanceData* pData) {
 	}
 
 	/* if we are a CURVE client */
-	if (!strcmp(pData->authType, "CURVECLIENT")) {
+	if ((pData->authType != NULL) && (!strcmp(pData->authType, "CURVECLIENT"))) {
 		DBGPRINTF("omczmq: we are a curve client...\n");
 
 		is_server = false;
@@ -193,6 +195,12 @@ static rsRetVal initCZMQ(instanceData* pData) {
 		zsock_set_curve_serverkey (pData->sock, server_key);
 	}
 
+	/* if we are a PUB server */
+	if (pData->sockType == ZMQ_PUB) {
+		DBGPRINTF("omczmq: we are a pub server...\n");
+		is_server = true;
+	}
+
 	/* we default to CONNECT unless told otherwise */
 	int rc = zsock_attach(pData->sock, (const char*)pData->sockEndpoints, is_server);
 	if (rc == -1) {
@@ -213,14 +221,62 @@ rsRetVal outputCZMQ(uchar* msg, instanceData* pData) {
 		CHKiRet(initCZMQ(pData));
 	}
 
-	/* send the log line */
-	int rc = zstr_send(pData->sock, (char*)msg);
+	/* if we have a ZMQ_PUB sock and topics, send with topics */
+	if (pData->sockType == ZMQ_PUB && pData->topicList) {
+		char topic[256], *list = pData->topicList;
+		int rc;
 
-	/* something is very wrong */
-	if (rc == -1) {
-		errmsg.LogError(0, NO_ERRCODE, "omczmq: send of %s failed: %s",
-				msg, zmq_strerror(errno));
-		ABORT_FINALIZE(RS_RET_ERR);
+		while (list) {
+			char *delimiter = strchr(list, ',');
+			if (!delimiter) {
+				delimiter = list + strlen (list);
+			}
+
+			if (delimiter - list > 255) {
+				errmsg.LogError(0, NO_ERRCODE,
+						"pData->topicList must be under 256 characters");
+				ABORT_FINALIZE(RS_RET_ERR);
+			}
+
+			memcpy(topic, list, delimiter - list);
+			topic[delimiter - list] = 0;
+
+			/* send the topic */
+			rc = zstr_sendm(pData->sock, topic);
+
+			/* something is very wrong */
+			if (rc == -1) {
+				errmsg.LogError(0, NO_ERRCODE, "omczmq: send of topic %s failed"
+						": %s", topic, zmq_strerror(errno));
+				ABORT_FINALIZE(RS_RET_ERR);
+			}
+
+			/* send the log line */
+			rc = zstr_send(pData->sock, (char*)msg);
+
+			/* something is very wrong */
+			if (rc == -1) {
+				errmsg.LogError(0, NO_ERRCODE, "omczmq: send of %s failed: %s",
+						msg, zmq_strerror(errno));
+				ABORT_FINALIZE(RS_RET_ERR);
+			}
+
+			if (*delimiter == 0) {
+				break;
+			}
+
+			list = delimiter + 1;
+		}
+	} else {
+		/* send the log line */
+		int rc = zstr_send(pData->sock, (char*)msg);
+
+		/* something is very wrong */
+		if (rc == -1) {
+			errmsg.LogError(0, NO_ERRCODE, "omczmq: send of %s failed: %s",
+					msg, zmq_strerror(errno));
+			ABORT_FINALIZE(RS_RET_ERR);
+		}
 	}
 finalize_it:
 	RETiRet;
@@ -239,6 +295,7 @@ setInstParamDefaults(instanceData* pData) {
 	pData->authType = NULL;
 	pData->clientCertPath = NULL;
 	pData->serverCertPath = NULL;
+	pData->topicList = NULL;
 }
 
 
@@ -278,6 +335,7 @@ CODESTARTfreeInstance
 	free(pData->clientCertPath);
 	free(pData->serverCertPath);
 	free(pData->tplName);
+	free(pData->topicList);
 ENDfreeInstance
 
 
@@ -386,6 +444,17 @@ CODESTARTnewActInst
 		/* get beacon port */
 		else if (!strcmp(actpblk.descr[i].name, "beaconport")) {
 			pData->beaconport = atoi(es_str2cstr(pvals[i].val.d.estr, NULL));
+		}
+
+		/* get the subscription topics */
+		else if(!strcmp(actpblk.descr[i].name, "topics")) {
+			if (pData->sockType != ZMQ_PUB) {
+				errmsg.LogError(0, RS_RET_CONFIG_ERROR,
+						"topics is invalid unless socktype is PUB");
+				ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
+			}
+
+			pData->topicList = es_str2cstr(pvals[i].val.d.estr, NULL);
 		}
 
 		/* the config has a bad option */
