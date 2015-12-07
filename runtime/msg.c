@@ -71,7 +71,7 @@
 /* TODO: move the global variable root to the config object - had no time to to it
  * right now before vacation -- rgerhards, 2013-07-22
  */
-static pthread_rwlock_t glblVars_rwlock;
+static pthread_mutex_t glblVars_lock;
 struct json_object *global_var_root = NULL;
 
 /* static data */
@@ -405,6 +405,7 @@ static rsRetVal jsonPathFindParent(struct json_object *jroot, uchar *name, uchar
 static uchar * jsonPathGetLeaf(uchar *name, int lenName);
 static struct json_object *jsonDeepCopy(struct json_object *src);
 static json_bool jsonVarExtract(struct json_object* root, const char *key, struct json_object **value);
+void getRawMsgAfterPRI(msg_t * const pM, uchar **pBuf, int *piLen);
 
 
 /* the locking and unlocking implementations: */
@@ -549,6 +550,8 @@ propNameToID(uchar *pName, propid_t *pPropID)
 		*pPropID = PROP_SYSLOGTAG;
 	} else if(!strcmp((char*) pName, "rawmsg")) {
 		*pPropID = PROP_RAWMSG;
+	} else if(!strcmp((char*) pName, "rawmsg-after-pri")) {
+		*pPropID = PROP_RAWMSG_AFTER_PRI;
 	} else if(!strcmp((char*) pName, "inputname")) {
 		*pPropID = PROP_INPUTNAME;
 	} else if(!strcmp((char*) pName, "fromhost")) {
@@ -1562,6 +1565,38 @@ getRawMsg(msg_t * const pM, uchar **pBuf, int *piLen)
 		} else {
 			*pBuf = pM->pszRawMsg;
 			*piLen = pM->iLenRawMsg;
+		}
+	}
+}
+
+void
+getRawMsgAfterPRI(msg_t * const pM, uchar **pBuf, int *piLen)
+{
+	if(pM == NULL) {
+		*pBuf=  UCHAR_CONSTANT("");
+		*piLen = 0;
+	} else {
+		if(pM->pszRawMsg == NULL) {
+			*pBuf=  UCHAR_CONSTANT("");
+			*piLen = 0;
+		} else {
+			/* unfortunately, pM->offAfterPRI seems NOT to be
+			 * correct/consistent in all cases. imuxsock and imudp
+			 * seem to have other values than imptcp. Testbench
+			 * covers some of that. As a work-around, we caluculate
+			 * the value ourselfes here. -- rgerhards, 2015-10-09
+			 */
+			size_t offAfterPRI = 0;
+			if(pM->pszRawMsg[0] == '<') { /* do we have a PRI? */
+				if(pM->pszRawMsg[2] == '>')
+					offAfterPRI = 3;
+				else if(pM->pszRawMsg[3] == '>')
+					offAfterPRI = 4;
+				else if(pM->pszRawMsg[4] == '>')
+					offAfterPRI = 5;
+			}
+			*pBuf = pM->pszRawMsg + offAfterPRI;
+			*piLen = pM->iLenRawMsg - offAfterPRI;
 		}
 	}
 }
@@ -2781,7 +2816,7 @@ getJSONPropVal(msg_t * const pMsg, msgPropDescr_t *pProp, uchar **pRes, rs_size_
 	} else if(pProp->id == PROP_LOCAL_VAR) {
 		jroot = pMsg->localvars;
 	} else if(pProp->id == PROP_GLOBAL_VAR) {
-		pthread_rwlock_rdlock(&glblVars_rwlock);
+		pthread_mutex_lock(&glblVars_lock);
 		jroot = global_var_root;
 	} else {
 		DBGPRINTF("msgGetJSONPropVal; invalid property id %d\n",
@@ -2806,7 +2841,7 @@ getJSONPropVal(msg_t * const pMsg, msgPropDescr_t *pProp, uchar **pRes, rs_size_
 
 finalize_it:
 	if(pProp->id == PROP_GLOBAL_VAR)
-		pthread_rwlock_unlock(&glblVars_rwlock);
+		pthread_mutex_unlock(&glblVars_lock);
 	if(*pRes == NULL) {
 		/* could not find any value, so set it to empty */
 		*pRes = (unsigned char*)"";
@@ -2832,7 +2867,7 @@ msgGetJSONPropJSON(msg_t * const pMsg, msgPropDescr_t *pProp, struct json_object
 	} else if(pProp->id == PROP_LOCAL_VAR) {
 		jroot = pMsg->localvars;
 	} else if(pProp->id == PROP_GLOBAL_VAR) {
-		pthread_rwlock_rdlock(&glblVars_rwlock);
+		pthread_mutex_lock(&glblVars_lock);
 		jroot = global_var_root;
 	} else {
 		DBGPRINTF("msgGetJSONPropJSON; invalid property id %d\n",
@@ -2859,7 +2894,7 @@ finalize_it:
 	if(pProp->id == PROP_GLOBAL_VAR) {
 		if (*pjson != NULL)
 			*pjson = jsonDeepCopy(*pjson);
-		pthread_rwlock_unlock(&glblVars_rwlock);
+		pthread_mutex_unlock(&glblVars_lock);
 	} else {
 		if (*pjson != NULL)
 			json_object_get(*pjson);
@@ -3133,6 +3168,9 @@ uchar *MsgGetProp(msg_t *__restrict__ const pMsg, struct templateEntry *__restri
 			break;
 		case PROP_RAWMSG:
 			getRawMsg(pMsg, &pRes, &bufLen);
+			break;
+		case PROP_RAWMSG_AFTER_PRI:
+			getRawMsgAfterPRI(pMsg, &pRes, &bufLen);
 			break;
 		case PROP_INPUTNAME:
 			getInputName(pMsg, &pRes, &bufLen);
@@ -4267,7 +4305,7 @@ msgAddJSON(msg_t * const pM, uchar *name, struct json_object *json, int force_re
 	} else if(name[0] == '.') {
 		pjroot = &pM->localvars;
 	} else if (name[0] == '/') { /* globl var */
-		pthread_rwlock_wrlock(&glblVars_rwlock);
+		pthread_mutex_lock(&glblVars_lock);
 		pjroot = &global_var_root;
 		if (sharedReference) {
 			given = json;
@@ -4329,7 +4367,7 @@ msgAddJSON(msg_t * const pM, uchar *name, struct json_object *json, int force_re
 
 finalize_it:
 	if(name[0] == '/')
-		pthread_rwlock_unlock(&glblVars_rwlock);
+		pthread_mutex_unlock(&glblVars_lock);
 	MsgUnlock(pM);
 	RETiRet;
 }
@@ -4350,7 +4388,7 @@ msgDelJSON(msg_t * const pM, uchar *name)
 	} else if(name[0] == '.') {
 		jroot = &pM->localvars;
 	} else if (name[0] == '/') { /* globl var */
-		pthread_rwlock_wrlock(&glblVars_rwlock);
+		pthread_mutex_lock(&glblVars_lock);
 		jroot = &global_var_root;
 	} else {
 		DBGPRINTF("Passed name %s is unknown kind of variable (It is not CEE, Local or Global variable).", name);
@@ -4391,7 +4429,7 @@ msgDelJSON(msg_t * const pM, uchar *name)
 
 finalize_it:
 	if(name[0] == '/')
-		pthread_rwlock_unlock(&glblVars_rwlock);
+		pthread_mutex_unlock(&glblVars_lock);
 	MsgUnlock(pM);
 	RETiRet;
 }
@@ -4577,7 +4615,7 @@ rsRetVal msgQueryInterface(void) { return RS_RET_NOT_IMPLEMENTED; }
  * rgerhards, 2008-01-04
  */
 BEGINObjClassInit(msg, 1, OBJ_IS_CORE_MODULE)
-	pthread_rwlock_init(&glblVars_rwlock, NULL);
+	pthread_mutex_init(&glblVars_lock, NULL);
 
 	/* request objects we use */
 	CHKiRet(objUse(datetime, CORE_COMPONENT));
