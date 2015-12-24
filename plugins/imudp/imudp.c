@@ -417,7 +417,7 @@ processPacket(struct lstn_s *lstn, struct sockaddr_storage *frominetPrev, int *p
 		*pbIsPermitted = 1; /* no check -> everything permitted */
 	}
 
-	DBGPRINTF("recv(%d,%d),acl:%d,msg:%.128s\n", lstn->sock, (int) lenRcvBuf, *pbIsPermitted, rcvBuf);
+	DBGPRINTF("recv(%d,%d),acl:%d,msg:%.*s\n", lstn->sock, (int) lenRcvBuf, *pbIsPermitted, (int)lenRcvBuf, rcvBuf);
 
 	if(*pbIsPermitted != 0)  {
 		/* we now create our own message object and submit it to the queue */
@@ -459,7 +459,9 @@ processSocket(struct wrkrInfo_s *pWrkr, struct lstn_s *lstn, struct sockaddr_sto
 {
 	DEFiRet;
 	int iNbrTimeUsed;
-	time_t ttGenTime;
+	time_t ttGenTime = 0; /* to avoid clang static analyzer false positive */
+		/* note: we do never use this time, because we always get a 
+		 * requery below on first loop iteration */
 	struct syslogTime stTime;
 	char errStr[1024];
 	msg_t *pMsgs[CONF_NUM_MULTISUB];

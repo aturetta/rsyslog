@@ -95,12 +95,12 @@ rsksiImprintFromKSI_DataHash(ksifile ksi, KSI_DataHash *hash)
 	int r;
 	imprint_t *imp;
 	const unsigned char *digest;
-	unsigned digest_len;
+	size_t digest_len;
 
 	if((imp = calloc(1, sizeof(imprint_t))) == NULL) {
 		goto done;
 	}
-	int hashID;
+	KSI_HashAlgorithm hashID;
 	r = KSI_DataHash_extract(hash, &hashID, &digest, &digest_len); 
 	if (r != KSI_OK){
 		reportKSIAPIErr(ksi->ctx, ksi, "KSI_DataHash_extract", r);
@@ -156,7 +156,7 @@ rsksiExit(void)
 static inline ksifile
 rsksifileConstruct(rsksictx ctx)
 {
-	ksifile ksi;
+	ksifile ksi = NULL;
 	if((ksi = calloc(1, sizeof(struct ksifile_s))) == NULL)
 		goto done;
 	ksi->ctx = ctx;
@@ -169,14 +169,14 @@ rsksifileConstruct(rsksictx ctx)
 done:	return ksi;
 }
 
-static inline int
+static inline size_t 
 tlvbufPhysWrite(ksifile ksi)
 {
 	ssize_t lenBuf;
 	ssize_t iTotalWritten;
 	ssize_t iWritten;
 	char *pWriteBuf;
-	int r = 0;
+	size_t r = 0;
 
 	lenBuf = ksi->tlvIdx;
 	pWriteBuf = ksi->tlvBuf;
@@ -204,7 +204,7 @@ finalize_it:
 	return r;
 }
 
-static inline int
+static inline size_t 
 tlvbufChkWrite(ksifile ksi)
 {
 	if(ksi->tlvIdx == sizeof(ksi->tlvBuf)) {
@@ -217,19 +217,19 @@ tlvbufChkWrite(ksifile ksi)
 /* write to TLV file buffer. If buffer is full, an actual call occurs. Else
  * output is written only on flush or close.
  */
-static inline int
+static inline size_t
 tlvbufAddOctet(ksifile ksi, int8_t octet)
 {
-	int r;
+	size_t r;
 	r = tlvbufChkWrite(ksi);
 	if(r != 0) goto done;
 	ksi->tlvBuf[ksi->tlvIdx++] = octet;
 done:	return r;
 }
-static inline int
-tlvbufAddOctetString(ksifile ksi, uint8_t *octet, int size)
+static inline size_t 
+tlvbufAddOctetString(ksifile ksi, uint8_t *octet, size_t size)
 {
-	int i, r = 0;
+	size_t i, r = 0;
 	for(i = 0 ; i < size ; ++i) {
 		r = tlvbufAddOctet(ksi, octet[i]);
 		if(r != 0) goto done;
@@ -336,7 +336,7 @@ tlvWriteHashKSI(ksifile ksi, uint16_t tlvtype, KSI_DataHash *rec)
 	unsigned tlvlen;
 	int r;
 	const unsigned char *digest;
-	unsigned digest_len;
+	size_t digest_len;
 	r = KSI_DataHash_extract(rec, NULL, &digest, &digest_len); 
 	if (r != KSI_OK){
 		reportKSIAPIErr(ksi->ctx, ksi, "KSI_DataHash_extract", r);
@@ -359,25 +359,18 @@ tlvWriteBlockHdrKSI(ksifile ksi) {
 	 	  2 + hashOutputLengthOctetsKSI(ksi->hashAlg) /* iv */ +
 		  2 + 1 + ksi->x_prev->len /* last hash */;
 	/* write top-level TLV object block-hdr */
-	r = tlv16WriteKSI(ksi, 0x00, 0x0901, tlvlen);
+	CHKr(tlv16WriteKSI(ksi, 0x00, 0x0901, tlvlen));
 	/* and now write the children */
 	/* hash-algo */
-	r = tlv8WriteKSI(ksi, 0x00, 0x01, 1);
-	if(r != 0) goto done;
-	r = tlvbufAddOctet(ksi, hashIdentifierKSI(ksi->hashAlg));
-	if(r != 0) goto done;
+	CHKr(tlv8WriteKSI(ksi, 0x00, 0x01, 1));
+	CHKr(tlvbufAddOctet(ksi, hashIdentifierKSI(ksi->hashAlg)));
 	/* block-iv */
-	r = tlv8WriteKSI(ksi, 0x00, 0x02, hashOutputLengthOctetsKSI(ksi->hashAlg));
-	if(r != 0) goto done;
-	r = tlvbufAddOctetString(ksi, ksi->IV, hashOutputLengthOctetsKSI(ksi->hashAlg));
-	if(r != 0) goto done;
+	CHKr(tlv8WriteKSI(ksi, 0x00, 0x02, hashOutputLengthOctetsKSI(ksi->hashAlg)));
+	CHKr(tlvbufAddOctetString(ksi, ksi->IV, hashOutputLengthOctetsKSI(ksi->hashAlg)));
 	/* last-hash */
-	r = tlv8WriteKSI(ksi, 0x00, 0x03, ksi->x_prev->len + 1);
-	if(r != 0) goto done;
-	r = tlvbufAddOctet(ksi, ksi->x_prev->hashID);
-	if(r != 0) goto done;
-	r = tlvbufAddOctetString(ksi, ksi->x_prev->data, ksi->x_prev->len);
-	if(r != 0) goto done;
+	CHKr(tlv8WriteKSI(ksi, 0x00, 0x03, ksi->x_prev->len + 1));
+	CHKr(tlvbufAddOctet(ksi, ksi->x_prev->hashID));
+	CHKr(tlvbufAddOctetString(ksi, ksi->x_prev->data, ksi->x_prev->len));
 done:	return r;
 }
 
@@ -401,8 +394,8 @@ tlvWriteBlockSigKSI(ksifile ksi, uchar *der, uint16_t lenDer)
 	if(r != 0) goto done;
 	r = tlvbufAddInt64(ksi, ksi->nRecords);
 	if(r != 0) goto done;
-	/* rfc-3161 */
-	r = tlv16WriteKSI(ksi, 0x00, 0x906, lenDer);
+	/* Open-KSI signature */
+	r = tlv16WriteKSI(ksi, 0x00, 0x905, lenDer);
 	if(r != 0) goto done;
 	r = tlvbufAddOctetString(ksi, der, lenDer);
 done:	return r;
@@ -439,6 +432,7 @@ readStateFile(ksifile ksi)
 	if (ksi->x_prev->data == NULL) {
 		free(ksi->x_prev);
 		ksi->x_prev = NULL;
+		goto err;
 	}
 
 	if(read(fd, ksi->x_prev->data, ksi->x_prev->len)
@@ -451,7 +445,6 @@ readStateFile(ksifile ksi)
 return;
 
 err:
-
 	ksi->x_prev = malloc(sizeof(imprint_t));
 	ksi->x_prev->hashID = hashIdentifierKSI(ksi->hashAlg);
 	ksi->x_prev->len = hashOutputLengthOctetsKSI(ksi->hashAlg);
@@ -587,6 +580,8 @@ rsksiCtxOpenFile(rsksictx ctx, unsigned char *logfn)
 	ksi->statefilename = (uchar*) strdup(fn);
 	if(tlvOpenKSI(ksi, LOGSIGHDR, sizeof(LOGSIGHDR)-1) != 0) {
 		reportErr(ctx, "signature file open failed");
+		/* Free memory */
+		free(ksi);
 		ksi = NULL;
 	}
 done:	return ksi;
@@ -610,8 +605,6 @@ rsksiSetHashFunction(rsksictx ctx, char *algName)
 		ctx->hashAlg = KSI_HASHALG_SHA2_384;
 	else if(!strcmp(algName, "SHA2-512"))
 		ctx->hashAlg = KSI_HASHALG_SHA2_512;
-	else if(!strcmp(algName, "RIPEMD-256"))
-		ctx->hashAlg = KSI_HASHALG_RIPEMD_256;
 	else if(!strcmp(algName, "SHA3-244"))
 		ctx->hashAlg = KSI_HASHALG_SHA3_244;
 	else if(!strcmp(algName, "SHA3-256"))
@@ -701,7 +694,7 @@ bufAddHash(ksifile ksi, uchar *buf, size_t *len, KSI_DataHash *hash)
 {
 	int r; 
 	const unsigned char *digest;
-	unsigned digest_len;
+	size_t digest_len;
 	r = KSI_DataHash_extract(hash, NULL, &digest, &digest_len); // TODO: error check
 	if (r != KSI_OK){
 		reportKSIAPIErr(ksi->ctx, ksi, "KSI_DataHash_extract", r);
@@ -847,7 +840,7 @@ static int
 signIt(ksifile ksi, KSI_DataHash *hash)
 {
 	unsigned char *der = NULL;
-	unsigned lenDer;
+	size_t lenDer;
 	int r = KSI_OK;
 	int ret = 0;
 	KSI_Signature *sig = NULL;

@@ -306,6 +306,7 @@ rsRetVal actionDestruct(action_t * const pThis)
 		pThis->pMod->freeInstance(pThis->pModData);
 
 	pthread_mutex_destroy(&pThis->mutAction);
+	pthread_mutex_destroy(&pThis->mutWrkrDataTable);
 	d_free(pThis->pszName);
 	d_free(pThis->ppTpl);
 	d_free(pThis->peParamPassing);
@@ -360,6 +361,7 @@ rsRetVal actionConstruct(action_t **ppThis)
 	pThis->tLastOccur = datetime.GetTime(NULL);	/* done once per action on startup only */
 	pThis->iActionNbr = iActionNbr;
 	pthread_mutex_init(&pThis->mutAction, NULL);
+	pthread_mutex_init(&pThis->mutWrkrDataTable, NULL);
 	INIT_ATOMIC_HELPER_MUT(pThis->mutCAS);
 
 	/* indicate we have a new action */
@@ -778,6 +780,7 @@ actionCheckAndCreateWrkrInstance(action_t * const pThis, wti_t * const pWti)
 		
 		/* maintain worker data table -- only needed if wrkrHUP is requested! */
 
+		pthread_mutex_lock(&pThis->mutWrkrDataTable);
 		int freeSpot;
 		for(freeSpot = 0 ; freeSpot < pThis->wrkrDataTableSize ; ++freeSpot)
 			if(pThis->wrkrDataTable[freeSpot] == NULL)
@@ -791,6 +794,7 @@ actionCheckAndCreateWrkrInstance(action_t * const pThis, wti_t * const pWti)
 dbgprintf("DDDD: writing data to table spot %d\n", freeSpot);
 		pThis->wrkrDataTable[freeSpot] = pWti->actWrkrInfo[pThis->iActionNbr].actWrkrData;
 		pThis->nWrkr++;
+		pthread_mutex_unlock(&pThis->mutWrkrDataTable);
 		DBGPRINTF("wti %p: created action worker instance %d for "
 			  "action %d\n", pWti, pThis->nWrkr, pThis->iActionNbr);
 	}
@@ -978,15 +982,20 @@ releaseDoActionParams(action_t *__restrict__ const pAction, wti_t *__restrict__ 
 		switch(pAction->peParamPassing[j]) {
 		case ACT_ARRAY_PASSING:
 			ppMsgs = (uchar***) pWrkrInfo->p.nontx.actParams[0].param;
-			if(((uchar**)ppMsgs)[j] != NULL) {
-				jArr = 0;
-				while(ppMsgs[j][jArr] != NULL) {
-					free(ppMsgs[j][jArr]);
-					ppMsgs[j][jArr] = NULL;
-					++jArr;
+			/* if we every use array passing mode again, we need to check
+			 * this code. It hasn't been used since refactoring for v7.
+			 */
+			if(ppMsgs != NULL) {
+				if(((uchar**)ppMsgs)[j] != NULL) {
+					jArr = 0;
+					while(ppMsgs[j][jArr] != NULL) {
+						free(ppMsgs[j][jArr]);
+						ppMsgs[j][jArr] = NULL;
+						++jArr;
+					}
+					free(((uchar**)ppMsgs)[j]);
+					((uchar**)ppMsgs)[j] = NULL;
 				}
-				free(((uchar**)ppMsgs)[j]);
-				((uchar**)ppMsgs)[j] = NULL;
 			}
 			break;
 		case ACT_JSON_PASSING:
@@ -1291,7 +1300,7 @@ processMsgMain(action_t *__restrict__ const pAction,
 {
 	DEFiRet;
 
-	iRet = prepareDoActionParams(pAction, pWti, pMsg, ttNow);
+	CHKiRet(prepareDoActionParams(pAction, pWti, pMsg, ttNow));
 
 	if(pAction->isTransactional) {
 		pWti->actWrkrInfo[pAction->iActionNbr].pAction = pAction;
@@ -1332,7 +1341,10 @@ processBatchMain(void *__restrict__ const pVoid,
 
 	for(i = 0 ; i < batchNumMsgs(pBatch) && !*pWti->pbShutdownImmediate ; ++i) {
 		if(batchIsValidElem(pBatch, i)) {
-			iRet = processMsgMain(pAction, pWti, pBatch->pElem[i].pMsg, &ttNow);
+			/* we do not check error state below, because aborting would be
+			 * more harmful than continuing.
+			 */
+			processMsgMain(pAction, pWti, pBatch->pElem[i].pMsg, &ttNow);
 			batchSetElemState(pBatch, i, BATCH_STATE_COMM);
 		}
 	}
@@ -1349,6 +1361,7 @@ void
 actionRemoveWorker(action_t *const __restrict__ pAction,
 	void *const __restrict__ actWrkrData)
 {
+	pthread_mutex_lock(&pAction->mutWrkrDataTable);
 	pAction->nWrkr--;
 	for(int w = 0 ; w < pAction->wrkrDataTableSize ; ++w) {
 		if(pAction->wrkrDataTable[w] == actWrkrData) {
@@ -1356,6 +1369,7 @@ actionRemoveWorker(action_t *const __restrict__ pAction,
 			break; /* done */
 		}
 	}
+	pthread_mutex_unlock(&pAction->mutWrkrDataTable);
 }
 
 
@@ -1377,14 +1391,21 @@ actionCallHUPHdlr(action_t * const pAction)
 	}
 
 	if(pAction->pMod->doHUPWrkr != NULL) {
+		pthread_mutex_lock(&pAction->mutWrkrDataTable);
 		for(int i = 0 ; i < pAction->wrkrDataTableSize ; ++i) {
 			dbgprintf("HUP: table entry %d: %p %s\n", i,
 				pAction->wrkrDataTable[i],
 				pAction->wrkrDataTable[i] == NULL ? "[unused]" : "");
 			if(pAction->wrkrDataTable[i] != NULL) {
-				CHKiRet(pAction->pMod->doHUPWrkr(pAction->wrkrDataTable[i]));
+				const rsRetVal localRet
+					= pAction->pMod->doHUPWrkr(pAction->wrkrDataTable[i]);
+				if(localRet != RS_RET_OK) {
+					DBGPRINTF("HUP handler returned error state %d - "
+						  "ignored\n", localRet);
+				}
 			}
 		}
+		pthread_mutex_unlock(&pAction->mutWrkrDataTable);
 	}
 
 finalize_it:

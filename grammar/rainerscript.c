@@ -112,7 +112,19 @@ tokenToString(const int token)
 	case CMP_STARTSWITH: tokstr ="CMP_STARTSWITH"; break;
 	case CMP_STARTSWITHI: tokstr ="CMP_STARTSWITHI"; break;
 	case UMINUS: tokstr ="UMINUS"; break;
-	default: snprintf(tokbuf, sizeof(tokbuf), "%c[%d]", token, token); 
+	case '&': tokstr ="&"; break;
+	case '+': tokstr ="+"; break;
+	case '-': tokstr ="-"; break;
+	case '*': tokstr ="*"; break;
+	case '/': tokstr ="/"; break;
+	case '%': tokstr ="%"; break;
+	case 'M': tokstr ="M"; break;
+	case 'N': tokstr ="N"; break;
+	case 'S': tokstr ="S"; break;
+	case 'V': tokstr ="V"; break;
+	case 'F': tokstr ="F"; break;
+	case 'A': tokstr ="A"; break;
+	default: snprintf(tokbuf, sizeof(tokbuf), "%c[%d]", token, token);
 		 tokstr = tokbuf; break;
 	}
 	return tokstr;
@@ -768,7 +780,7 @@ doGetGID(struct nvlst *valnode, struct cnfparamdescr *param,
 	} else {
 		val->val.datatype = 'N';
 		val->val.d.n = resultBuf->gr_gid;
-		dbgprintf("param '%s': uid %d obtained for group '%s'\n",
+		DBGPRINTF("param '%s': uid %d obtained for group '%s'\n",
 		   param->name, (int) resultBuf->gr_gid, cstr);
 		r = 1;
 	}
@@ -795,7 +807,7 @@ doGetUID(struct nvlst *valnode, struct cnfparamdescr *param,
 	} else {
 		val->val.datatype = 'N';
 		val->val.d.n = resultBuf->pw_uid;
-		dbgprintf("param '%s': uid %d obtained for user '%s'\n",
+		DBGPRINTF("param '%s': uid %d obtained for user '%s'\n",
 		   param->name, (int) resultBuf->pw_uid, cstr);
 		r = 1;
 	}
@@ -1001,7 +1013,7 @@ nvlstGetParam(struct nvlst *valnode, struct cnfparamdescr *param,
 		r = 1; /* this *is* valid! */
 		break;
 	default:
-		dbgprintf("error: invalid param type\n");
+		DBGPRINTF("error: invalid param type\n");
 		r = 0;
 		break;
 	}
@@ -1026,7 +1038,7 @@ nvlstGetParams(struct nvlst *lst, struct cnfparamblk *params,
 	struct cnfparamdescr *param;
 
 	if(params->version != CNFPARAMBLK_VERSION) {
-		dbgprintf("nvlstGetParams: invalid param block version "
+		DBGPRINTF("nvlstGetParams: invalid param block version "
 			  "%d, expected %d\n",
 			  params->version, CNFPARAMBLK_VERSION);
 		return NULL;
@@ -1086,7 +1098,7 @@ cnfparamvalsIsSet(struct cnfparamblk *params, struct cnfparamvals *vals)
 	if(vals == NULL)
 		return 0;
 	if(params->version != CNFPARAMBLK_VERSION) {
-		dbgprintf("nvlstGetParams: invalid param block version "
+		DBGPRINTF("nvlstGetParams: invalid param block version "
 			  "%d, expected %d\n",
 			  params->version, CNFPARAMBLK_VERSION);
 		return 0;
@@ -1104,6 +1116,9 @@ cnfparamsPrint(const struct cnfparamblk *params, const struct cnfparamvals *vals
 {
 	int i;
 	char *cstr;
+
+	if(!Debug)
+		return;
 
 	for(i = 0 ; i < params->nParams ; ++i) {
 		dbgprintf("%s: ", params->descr[i].name);
@@ -1188,16 +1203,44 @@ done:
 }
 
 
-/* ensure that retval is a number; if string is no number,
- * try to convert it to one. The semantics from es_str2num()
- * are used (bSuccess tells if the conversion went well or not).
+static inline int64_t
+str2num(es_str_t *s, int *bSuccess)
+{
+	size_t i;
+	int neg;
+	int64_t num = 0;
+	const uchar *const c = es_getBufAddr(s);
+
+	if(c[0] == '-') {
+		neg = -1;
+		i = -1;
+	} else {
+		neg = 1;
+		i = 0;
+	}
+	while(i < s->lenStr && isdigit(c[i])) {
+		num = num * 10 + c[i] - '0';
+		++i;
+	}
+	num *= neg;
+	if(bSuccess != NULL)
+		*bSuccess = (i == s->lenStr) ? 1 : 0;
+	return num;
+}
+
+/* We support decimal integers. Unfortunately, previous versions
+ * said they support oct and hex, but that wasn't really the case.
+ * Everything based on JSON was just dec-converted. As this was/is
+ * the norm, we fix that inconsistency. Luckly, oct and hex support
+ * was never documented.
+ * rgerhards, 2015-11-12
  */
 static long long
 var2Number(struct var *r, int *bSuccess)
 {
 	long long n;
 	if(r->datatype == 'S') {
-		n = es_str2num(r->d.estr, bSuccess);
+		n = str2num(r->d.estr, bSuccess);
 	} else {
 		if(r->datatype == 'J') {
 #ifdef HAVE_JSON_OBJECT_NEW_INT64
@@ -1262,15 +1305,15 @@ var2CString(struct var *__restrict__ const r, int *__restrict__ const bMustFree)
 
 int SKIP_NOTHING = 0x0;
 int SKIP_STRING = 0x1;
-int SKIP_JSON = 0x2;
 
 static void
 varFreeMembersSelectively(const struct var *r, const int skipMask)
 {
-	int kill_string = ! (skipMask & SKIP_STRING);
-	if(kill_string && (r->datatype == 'S')) es_deleteStr(r->d.estr);
-	int kill_json = ! (skipMask & SKIP_JSON);
-	if(kill_json && (r->datatype == 'J')) json_object_put(r->d.json);
+	if(r->datatype == 'J') {
+		json_object_put(r->d.json);
+	} else if( !(skipMask & SKIP_STRING) && (r->datatype == 'S')) {
+		es_deleteStr(r->d.estr);
+	}
 }
 
 static void
@@ -1302,7 +1345,7 @@ doExtractFieldByChar(uchar *str, uchar delim, const int matchnbr, uchar **resstr
 			++iCurrFld;
 		}
 	}
-	dbgprintf("field() field requested %d, field found %d\n", matchnbr, iCurrFld);
+	DBGPRINTF("field() field requested %d, field found %d\n", matchnbr, iCurrFld);
 	
 	if(iCurrFld == matchnbr) {
 		/* field found, now extract it */
@@ -1349,7 +1392,7 @@ doExtractFieldByStr(uchar *str, char *delim, const rs_size_t lenDelim, const int
 			++iCurrFld;
 		}
 	}
-	dbgprintf("field() field requested %d, field found %d\n", matchnbr, iCurrFld);
+	DBGPRINTF("field() field requested %d, field found %d\n", matchnbr, iCurrFld);
 	
 	if(iCurrFld == matchnbr) {
 		/* field found, now extract it */
@@ -1413,16 +1456,16 @@ doFunc_re_extract(struct cnffunc *func, struct var *ret, void* usrptr)
 		int iREstat;
 		iREstat = regexp.regexec(func->funcdata, (char*)(str + iOffs),
 					 submatchnbr+1, pmatch, 0);
-		dbgprintf("re_extract: regexec return is %d\n", iREstat);
+		DBGPRINTF("re_extract: regexec return is %d\n", iREstat);
 		if(iREstat == 0) {
 			if(pmatch[0].rm_so == -1) {
-				dbgprintf("oops ... start offset of successful regexec is -1\n");
+				DBGPRINTF("oops ... start offset of successful regexec is -1\n");
 				break;
 			}
 			if(iTry == matchnbr) {
 				bFound = 1;
 			} else {
-				dbgprintf("re_extract: regex found at offset %d, new offset %d, tries %d\n",
+				DBGPRINTF("re_extract: regex found at offset %d, new offset %d, tries %d\n",
 					  iOffs, (int) (iOffs + pmatch[0].rm_eo), iTry);
 				iOffs += pmatch[0].rm_eo;
 				++iTry;
@@ -1431,7 +1474,7 @@ doFunc_re_extract(struct cnffunc *func, struct var *ret, void* usrptr)
 			break;
 		}
 	}
-	dbgprintf("re_extract: regex: end search, found %d\n", bFound);
+	DBGPRINTF("re_extract: regex: end search, found %d\n", bFound);
 	if(!bFound) {
 		bHadNoMatch = 1;
 		goto finalize_it;
@@ -1584,12 +1627,18 @@ doRandomGen(struct var *__restrict__ const sourceVal) {
 	int success = 0;
 	long long max = var2Number(sourceVal, &success);
 	if (! success) {
-		dbgprintf("rainerscript: random(max) didn't get a valid 'max' limit, defaulting random-number value to 0");
+		DBGPRINTF("rainerscript: random(max) didn't get a valid 'max' limit, defaulting random-number value to 0");
+		return 0;
+	}
+	if(max == 0) {
+		DBGPRINTF("rainerscript: random(max) invalid, 'max' is zero, , defaulting random-number value to 0");
 		return 0;
 	}
 	long int x = randomNumber();
 	if (max > MAX_RANDOM_NUMBER) {
-		dbgprintf("rainerscript: desired random-number range [0 - %ld) is wider than supported limit of [0 - %ld)", max, MAX_RANDOM_NUMBER);
+		DBGPRINTF("rainerscript: desired random-number range [0 - %lld] "
+			"is wider than supported limit of [0 - %d)",
+			max, MAX_RANDOM_NUMBER);
 	}
 	return x % max;
 }
@@ -1601,7 +1650,6 @@ static inline void
 doFuncCall(struct cnffunc *__restrict__ const func, struct var *__restrict__ const ret,
 	   void *__restrict__ const usrptr)
 {
-	char *fname;
 	char *envvar;
 	int bMustFree;
 	es_str_t *estr;
@@ -1614,7 +1662,7 @@ doFuncCall(struct cnffunc *__restrict__ const func, struct var *__restrict__ con
 	struct funcData_prifilt *pPrifilt;
 	rsRetVal localRet;
 
-	dbgprintf("rainerscript: executing function id %d\n", func->fID);
+	DBGPRINTF("rainerscript: executing function id %d\n", func->fID);
 	switch(func->fID) {
 	case CNFFUNC_STRLEN:
 		if(func->expr[0]->nodetype == 'S') {
@@ -1708,6 +1756,7 @@ doFuncCall(struct cnffunc *__restrict__ const func, struct var *__restrict__ con
 			varFreeMembers(&r[0]);
 		}
 		ret->datatype = 'N';
+		DBGPRINTF("JSONorString: cnum node type %c result %d\n", func->expr[0]->nodetype, (int) ret->d.n);
 		break;
 	case CNFFUNC_RE_MATCH:
 		cnfexprEval(func->expr[0], &r[0], usrptr);
@@ -1774,7 +1823,6 @@ doFuncCall(struct cnffunc *__restrict__ const func, struct var *__restrict__ con
 		ret->datatype = 'N';
 		break;
 	case CNFFUNC_LOOKUP:
-dbgprintf("DDDD: executing lookup\n");
 		ret->datatype = 'S';
 		if(func->funcdata == NULL) {
 			ret->d.estr = es_newStrFromCStr("TABLE-NOT-FOUND", sizeof("TABLE-NOT-FOUND")-1);
@@ -1788,7 +1836,7 @@ dbgprintf("DDDD: executing lookup\n");
 		break;
 	default:
 		if(Debug) {
-			fname = es_str2cstr(func->fname, NULL);
+			char *fname = es_str2cstr(func->fname, NULL);
 			dbgprintf("rainerscript: invalid function id %u (name '%s')\n",
 				  (unsigned) func->fID, fname);
 			free(fname);
@@ -1807,21 +1855,31 @@ evalVar(struct cnfvar *__restrict__ const var, void *__restrict__ const usrptr,
 	unsigned short bMustBeFreed = 0;
 	rsRetVal localRet;
 	struct json_object *json;
+	uchar *cstr;
 
 	if(var->prop.id == PROP_CEE        ||
 	   var->prop.id == PROP_LOCAL_VAR  ||
 	   var->prop.id == PROP_GLOBAL_VAR   ) {
-		localRet = msgGetJSONPropJSON((msg_t*)usrptr, &var->prop, &json);
-		ret->datatype = 'J';
-		ret->d.json = (localRet == RS_RET_OK) ? json : NULL;
-			
-		DBGPRINTF("rainerscript: var %d:%s: '%s'\n", var->prop.id, var->prop.name,
+		localRet = msgGetJSONPropJSONorString((msg_t*)usrptr, &var->prop, &json, &cstr);
+		if(json != NULL) {
+			ret->datatype = 'J';
+			ret->d.json = (localRet == RS_RET_OK) ? json : NULL;
+			DBGPRINTF("rainerscript: (json) var %d:%s: '%s'\n",
+				var->prop.id, var->prop.name,
 			  (ret->d.json == NULL) ? "" : json_object_get_string(ret->d.json));
+		} else { /* we have a string */
+			ret->datatype = 'S';
+			ret->d.estr = (localRet == RS_RET_OK) ?
+					  es_newStrFromCStr((char*) cstr, strlen((char*) cstr))
+					: es_newStr(1);
+			DBGPRINTF("rainerscript: (json/string) var %d: '%s'\n", var->prop.id, cstr);
+			free(cstr);
+		}
 	} else {
 		ret->datatype = 'S';
 		pszProp = (uchar*) MsgGetProp((msg_t*)usrptr, NULL, &var->prop, &propLen, &bMustBeFreed, NULL);
 		ret->d.estr = es_newStrFromCStr((char*)pszProp, propLen);
-		DBGPRINTF("rainerscript: var %d: '%s'\n", var->prop.id, pszProp);
+		DBGPRINTF("rainerscript: (string) var %d: '%s'\n", var->prop.id, pszProp);
 		if(bMustBeFreed)
 			free(pszProp);
 	}
@@ -2390,11 +2448,12 @@ cnfexprEval(const struct cnfexpr *__restrict__ const expr, struct var *__restric
 	default:
 		ret->datatype = 'N';
 		ret->d.n = 0ll;
-		dbgprintf("eval error: unknown nodetype %u['%c']\n",
+		DBGPRINTF("eval error: unknown nodetype %u['%c']\n",
 			(unsigned) expr->nodetype, (char) expr->nodetype);
 		break;
 	}
-	DBGPRINTF("eval expr %p, return datatype '%c'\n", expr, ret->datatype);
+	DBGPRINTF("eval expr %p, return datatype '%c':%d\n", expr, ret->datatype,
+		(ret->datatype == 'N') ? (int)ret->d.n: 0);
 }
 
 //---------------------------------------------------------
@@ -2512,8 +2571,15 @@ struct json_object*
 cnfexprEvalCollection(struct cnfexpr *__restrict__ const expr, void *__restrict__ const usrptr)
 {
 	struct var ret;
+	void *retptr;
 	cnfexprEval(expr, &ret, usrptr);
-	return ret.d.json;/*caller is supposed to free the returned json-object*/
+	if(ret.datatype == 'J') {
+		retptr = ret.d.json; /*caller is supposed to free the returned json-object*/
+	} else {
+		retptr = NULL;
+		varFreeMembers(&ret); /* we must free the element */
+	}
+	return retptr;
 }
 
 inline static void
@@ -2936,7 +3002,7 @@ cnfstmtDestruct(struct cnfstmt *stmt)
 		cnfstmtDestructLst(stmt->d.s_propfilt.t_then);
 		break;
 	default:
-		dbgprintf("error: unknown stmt type during destruct %u\n",
+		DBGPRINTF("error: unknown stmt type during destruct %u\n",
 			(unsigned) stmt->nodetype);
 		break;
 	}
@@ -2970,10 +3036,10 @@ cnfNewIterator(char *var, struct cnfexpr *collection)
 static void
 cnfIteratorDestruct(struct cnfitr *itr)
 {
-	if (itr->var != NULL) free(itr->var);
-	itr->var = NULL;
-	if (itr->collection != NULL) cnfexprDestruct(itr->collection);
-	itr->collection = NULL;
+	free(itr->var);
+	if(itr->collection != NULL)
+		cnfexprDestruct(itr->collection);
+	free(itr);
 }
 
 struct cnfstmt *
@@ -3339,7 +3405,7 @@ cnfexprOptimize(struct cnfexpr *expr)
 	long long ln, rn;
 	struct cnfexpr *exprswap;
 
-	dbgprintf("optimize expr %p, type '%s'\n", expr, tokenToString(expr->nodetype));
+	DBGPRINTF("optimize expr %p, type '%s'\n", expr, tokenToString(expr->nodetype));
 	switch(expr->nodetype) {
 	case '&':
 		constFoldConcat(expr);
@@ -3643,7 +3709,7 @@ cnfstmtOptimize(struct cnfstmt *root)
 			DBGPRINTF("optimizer error: we see a NOP, how come?\n");
 			break;
 		default:
-			dbgprintf("error: unknown stmt type %u during optimizer run\n",
+			DBGPRINTF("error: unknown stmt type %u during optimizer run\n",
 				(unsigned) stmt->nodetype);
 			break;
 		}
@@ -3667,10 +3733,10 @@ cnffparamlstNew(struct cnfexpr *expr, struct cnffparamlst *next)
 static const char* const numInWords[] = {"zero", "one", "two", "three", "four", "five", "six"};
 
 #define GENERATE_FUNC_WITH_NARG_RANGE(name, minArg, maxArg, funcId, errMsg) \
-	if(nParams < minArg || nParams > maxArg) {							\
-		parser_errmsg(errMsg, name, nParams);							\
-		return CNFFUNC_INVALID;											\
-	}																	\
+	if(nParams < minArg || nParams > maxArg) {	\
+		parser_errmsg(errMsg, name, nParams);	\
+		return CNFFUNC_INVALID;			\
+	}						\
 	return funcId
 
 
@@ -3727,10 +3793,10 @@ funcName2ID(es_str_t *fname, unsigned short nParams)
 			"but is %d.");
 	} else if(FUNC_NAME("wrap")) {
 		GENERATE_FUNC_WITH_NARG_RANGE("wrap", 2, 3, CNFFUNC_WRAP,
-									  "number of parameters for wrap() must either be "
-									  "two (operand_string, wrapper) or"
-									  "three (operand_string, wrapper, wrapper_escape_str)"
-									  "but is %d.");
+			"number of parameters for %s() must either be "
+			"two (operand_string, wrapper) or"
+			"three (operand_string, wrapper, wrapper_escape_str)"
+			"but is %d.");
 	} else if(FUNC_NAME("random")) {
 		GENERATE_FUNC("random", 1, CNFFUNC_RANDOM);
 	} else {
@@ -4013,13 +4079,13 @@ cnfDoInclude(char *name)
 		}
 
 		if(S_ISREG(fileInfo.st_mode)) { /* config file */
-			dbgprintf("requested to include config file '%s'\n", cfgFile);
+			DBGPRINTF("requested to include config file '%s'\n", cfgFile);
 			cnfSetLexFile(cfgFile);
 		} else if(S_ISDIR(fileInfo.st_mode)) { /* config directory */
-			dbgprintf("requested to include directory '%s'\n", cfgFile);
+			DBGPRINTF("requested to include directory '%s'\n", cfgFile);
 			cnfDoInclude(cfgFile);
 		} else {
-			dbgprintf("warning: unable to process IncludeConfig directive '%s'\n", cfgFile);
+			DBGPRINTF("warning: unable to process IncludeConfig directive '%s'\n", cfgFile);
 		}
 	}
 

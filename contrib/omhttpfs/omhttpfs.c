@@ -349,15 +349,24 @@ static size_t
 httpfs_curl_result_callback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     size_t realsize = size * nmemb;
+    char *newreply = NULL;
     wrkrInstanceData_t *mem = (wrkrInstanceData_t *)userp;
-
-    mem->reply = realloc(mem->reply, mem->replyLen + realsize + 1);
-    if(mem->reply == NULL) {
+    
+    newreply = realloc(mem->reply, mem->replyLen + realsize + 1);
+    if (newreply == NULL) {
         /* out of memory! */
-        printf("not enough memory (realloc returned NULL)\n");
+        dbgprintf("not enough memory (realloc returned NULL)\n");
+        
+        if (mem->reply != NULL) 
+            free(mem->reply);
+        
+        mem->reply = NULL;
+        mem->replyLen = 0;
+        
         return 0;
     }
 
+    mem->reply = newreply;
     memcpy(&(mem->reply[mem->replyLen]), contents, realsize);
     mem->replyLen += realsize;
     mem->reply[mem->replyLen] = 0;
@@ -427,7 +436,9 @@ int httpfs_permission_to_string(int permission, char* perm_string)
  */
 static rsRetVal
 httpfs_parse_exception(char* buf, int length, httpfs_json_remote_exception* jre)
-{
+{	
+	DEFiRet;
+	
     if (!length) {
         return RS_RET_JSON_PARSE_ERR;
     }
@@ -438,29 +449,44 @@ httpfs_parse_exception(char* buf, int length, httpfs_json_remote_exception* jre)
     struct json_object *json;
     json = json_tokener_parse_ex(jt, buf, length);
     if (!json_object_is_type(json, json_type_object)) {
-        // not an object ?
-        return RS_RET_JSON_PARSE_ERR;
+        // not an object ?        
+		ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
     }
 
-    if (!json_object_object_get_ex(json, "RemoteException", &json)) {
-        return RS_RET_JSON_PARSE_ERR;
+    if (!RS_json_object_object_get_ex(json, "RemoteException", &json)) {
+	ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
     }
 
     struct json_object *jobj;
 
     memset(jre, 0, sizeof(*jre));
 
-    json_object_object_get_ex(json, "javaClassName", &jobj);
-    strncpy(jre->class, (char*) json_object_get_string(jobj), json_object_get_string_len(jobj));
+    const char *str;
+    size_t len;
 
-    json_object_object_get_ex(json, "exception", &jobj);
-    strncpy(jre->exception, (char*) json_object_get_string(jobj), json_object_get_string_len(jobj));
+    RS_json_object_object_get_ex(json, "javaClassName", &jobj);
+    str = json_object_get_string(jobj);
+    len = strlen(str);
+    strncpy(jre->class, str, len);
 
-    json_object_object_get_ex(json, "message", &jobj);
-    strncpy(jre->message, (char*) json_object_get_string(jobj), json_object_get_string_len(jobj));
+    RS_json_object_object_get_ex(json, "exception", &jobj);
+    str = json_object_get_string(jobj);
+    len = strlen(str);
+    strncpy(jre->exception, str, len);
 
-    return RS_RET_OK;
-}
+    RS_json_object_object_get_ex(json, "message", &jobj);
+    str = json_object_get_string(jobj);
+    len = strlen(str);
+    strncpy(jre->message, str, len);
+
+finalize_it:
+	if(jt != NULL)
+		json_tokener_free(jt);
+	if(json != NULL)
+		json_object_put(json); 
+	RETiRet;
+}	
+
 
 #if 0
 /**
@@ -849,7 +875,7 @@ CODESTARTnewActInst
         if(!strcmp(actpblk.descr[i].name, "host")) {
             pData->host = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
         } else if(!strcmp(actpblk.descr[i].name, "port")) {
-            pData->port = (int) pvals[i].val.d.n, NULL;
+            pData->port = (int) pvals[i].val.d.n;
         } else if(!strcmp(actpblk.descr[i].name, "user")) {
             pData->user = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 
