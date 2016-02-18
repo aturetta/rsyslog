@@ -791,9 +791,9 @@ SubmitMsg(uchar *pRcv, int lenRcv, lstn_t *pLstn, struct ucred *cred, struct tim
 	findRatelimiter(pLstn, cred, &ratelimiter); /* ignore error, better so than others... */
 
 	if(ts == NULL) {
-		datetime.getCurrTime(&st, &tt);
+		datetime.getCurrTime(&st, &tt, TIME_IN_LOCALTIME);
 	} else {
-		datetime.timeval2syslogTime(ts, &st);
+		datetime.timeval2syslogTime(ts, &st, TIME_IN_LOCALTIME);
 		tt = ts->tv_sec;
 	}
 
@@ -1008,7 +1008,7 @@ static rsRetVal readSocket(lstn_t *pLstn)
 	if((size_t) iMaxLine < sizeof(bufRcv) - 1) {
 		pRcv = bufRcv;
 	} else {
-		CHKmalloc(pRcv = (uchar*) MALLOC(sizeof(uchar) * (iMaxLine + 1)));
+		CHKmalloc(pRcv = (uchar*) MALLOC(iMaxLine + 1));
 	}
 
 	memset(&msgh, 0, sizeof(msgh));

@@ -509,7 +509,7 @@ processSocket(struct wrkrInfo_s *pWrkr, struct lstn_s *lstn, struct sockaddr_sto
 		}
 
 		if((runModConf->iTimeRequery == 0) || (iNbrTimeUsed++ % runModConf->iTimeRequery) == 0) {
-			datetime.getCurrTime(&stTime, &ttGenTime);
+			datetime.getCurrTime(&stTime, &ttGenTime, TIME_IN_LOCALTIME);
 		}
 
 		pWrkr->ctrMsgsRcvd += nelem;
@@ -582,7 +582,7 @@ processSocket(struct wrkrInfo_s *pWrkr, struct lstn_s *lstn, struct sockaddr_sto
 
 		++pWrkr->ctrMsgsRcvd;
 		if((runModConf->iTimeRequery == 0) || (iNbrTimeUsed++ % runModConf->iTimeRequery) == 0) {
-			datetime.getCurrTime(&stTime, &ttGenTime);
+			datetime.getCurrTime(&stTime, &ttGenTime, TIME_IN_LOCALTIME);
 		}
 
 		CHKiRet(processPacket(lstn, frominetPrev, pbIsPermitted, pWrkr->pRcvBuf, lenRcvBuf, &stTime,
@@ -1105,7 +1105,7 @@ BEGINactivateCnf
 CODESTARTactivateCnf
 	/* caching various settings */
 	iMaxLine = glbl.GetMaxLine();
-	lenRcvBuf = (iMaxLine + 1) * sizeof(char);
+	lenRcvBuf = iMaxLine + 1;
 #	ifdef HAVE_RECVMMSG
 	lenRcvBuf *= runModConf->batchSize;
 #	endif

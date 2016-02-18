@@ -793,6 +793,8 @@ initTLS(void)
 }
 
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
 static void
 initTLSSess(int i)
 {
@@ -823,6 +825,8 @@ initTLSSess(int i)
 		exit(1);
 	}
 }
+#pragma GCC diagnostic pop
+
 
 static int
 sendTLS(int i, char *buf, int lenBuf)

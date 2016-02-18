@@ -868,7 +868,7 @@ DataRcvdUncompressed(ptcpsess_t *pThis, char *pData, size_t iLen, struct syslogT
 	assert(iLen > 0);
 
 	if(ttGenTime == 0)
-		datetime.getCurrTime(stTime, &ttGenTime);
+		datetime.getCurrTime(stTime, &ttGenTime, TIME_IN_LOCALTIME);
 	multiSub.ppMsgs = pMsgs;
 	multiSub.maxElem = CONF_NUM_MULTISUB;
 	multiSub.nElem = 0;
@@ -899,7 +899,7 @@ DataRcvdCompressed(ptcpsess_t *pThis, char *buf, size_t len)
 	// by simply updating the input and output sizes?
 	uint64_t outtotal;
 
-	datetime.getCurrTime(&stTime, &ttGenTime);
+	datetime.getCurrTime(&stTime, &ttGenTime, TIME_IN_LOCALTIME);
 	outtotal = 0;
 
 	if(!pThis->bzInitDone) {
@@ -1101,7 +1101,7 @@ addSess(ptcplstn_t *pLstn, int sock, prop_t *peerName, prop_t *peerIP)
 	ptcpsrv_t *pSrv = pLstn->pSrv;
 
 	CHKmalloc(pSess = malloc(sizeof(ptcpsess_t)));
-	CHKmalloc(pSess->pMsg = malloc(iMaxLine * sizeof(uchar)));
+	CHKmalloc(pSess->pMsg = malloc(iMaxLine));
 	pSess->pLstn = pLstn;
 	pSess->sock = sock;
 	pSess->bSuppOctetFram = pLstn->bSuppOctetFram;

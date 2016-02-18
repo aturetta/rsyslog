@@ -1,4 +1,69 @@
 ------------------------------------------------------------------------------
+Version 8.16.0 [v8-stable] 2016-01-26
+- rsgtutil: Added extraction support including loglines and hash chains. 
+  More details on how to extract loglines can be found in the rsgtutil
+  manpage. See also: https://github.com/rsyslog/rsyslog/issues/561   
+- clean up doAction output module interface
+  We started with char * pointers, but used different types of pointers
+  over time. This lead to alignment warnings. In practice, I think this
+  should never cause any problems (at least there have been no reports
+  in the 7 or so years we do this), but it is not clean. The interface is
+  now cleaned up. We do this in a way that does not require modifications
+  to modules that just use string parameters. For those with message
+  parameters, have a look at e.g. mmutf8fix to see how easy the
+  required change is.
+- new system properties for $NOW properties based on UTC
+  This permits to express current system time in UTC.
+  See also https://github.com/rsyslog/rsyslog/issues/729
+- impstats: support broken ElasticSearch JSON implementation
+  ES 2.0 no longer supports valid JSON and disallows dots inside names.
+  This adds a new "json-elasticsearch" format option which replaces
+  those dots by the bang ("!") character. So "discarded.full" becomes
+  "discarded!full".
+  This is a workaroud. A method that will provide more control over
+  replacements will be implemented some time in the future. For
+  details, see below-quoted issue tracker.
+  closes https://github.com/rsyslog/rsyslog/issues/713
+- omelasticsearch: craft better URLs
+  Elasticsearch is confused by url's ending in a bare '?' or '&'. While
+  this is valid, those are no longer produced.
+  Thanks to Benno Evers for the patch.
+- imfile: add experimental "reopenOnTruncate" parameter
+  Thanks to Matthew Wang for the patch.
+- bugfix imfile: proper handling of inotify initialization failure
+  Thanks to Zachary Zhao for the patch.
+- bugfix imfile: potential segfault due to improper handling of ev var
+  This occurs in inotify mode, only.
+  Thanks to Zachary Zhao and Peter Portante for the patch.
+  closes https://github.com/rsyslog/rsyslog/issues/718
+- bugfix imfile: potential segfault under heavey load.
+  This occurs in inotify mode when using wildcards, only.
+  The root cause is dropped IN_IGNOPRED inotify events which be dropped
+  in circumstance of high input pressure and frequent rotation, and
+  according to wikipeida, they can also be dropped in other conditions.
+  Thanks to Zachary Zhao for the patch.
+  closes https://github.com/rsyslog/rsyslog/issues/723
+- bugfix ommail: invalid handling of server response
+  if that response was split into different read calls. Could lead to
+  error-termination of send operation. Problem is pretty unlikely to
+  occur in standard setups (requires slow connection to SMTP server).
+  Thank to github user haixingood for the patch.
+- bugfix omelasticsearch: custom serverport was ignored on some platforms
+  Thanks to Benno Evers for the patch.
+- bugfix: tarball did not include some testbench files
+  Thanks to Thomas D. (whissi) for the patch.
+- bugfix: memory misadressing during config parsing string template
+  This occurred if an (invalid) template option larger than 63 characters
+  was given.
+  Thanks to git hub user c6226 for the patch.
+- bugfix imzmq: memory leak
+  Thanks to Jeremy Liang for the patch.
+- bugfix imzmq: memory leak
+  Thanks to github user xushengping for the patch.
+- bugfix omzmq: memory leak
+  Thanks to Jack Lin for the patch.
+- some code improvement and cleanup
+------------------------------------------------------------------------------
 Version 8.15.0 [v8-stable] 2015-12-15
 - KSI Lib: Updated code to run with libksi 3.4.0.5 
   Also libksi 3.4.0.x is required to build rsyslog if ksi support

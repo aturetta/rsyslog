@@ -70,7 +70,7 @@ BEGINobjConstruct(tcps_sess) /* be sure to specify the object type also in END m
 		pThis->bAtStrtOfFram = 1; /* indicate frame header expected */
 		pThis->eFraming = TCP_FRAMING_OCTET_STUFFING; /* just make sure... */
 		/* now allocate the message reception buffer */
-		CHKmalloc(pThis->pMsg = (uchar*) MALLOC(sizeof(uchar) * glbl.GetMaxLine() + 1));
+		CHKmalloc(pThis->pMsg = (uchar*) MALLOC(glbl.GetMaxLine() + 1));
 finalize_it:
 ENDobjConstruct(tcps_sess)
 
@@ -315,7 +315,7 @@ PrepareClose(tcps_sess_t *pThis)
 		 * this case.
 		 */
 		DBGPRINTF("Extra data at end of stream in legacy syslog/tcp message - processing\n");
-		datetime.getCurrTime(&stTime, &ttGenTime);
+		datetime.getCurrTime(&stTime, &ttGenTime, TIME_IN_LOCALTIME);
 		defaultDoSubmitMessage(pThis, &stTime, ttGenTime, NULL);
 	}
 
@@ -476,7 +476,7 @@ DataRcvd(tcps_sess_t *pThis, char *pData, size_t iLen)
 	assert(pData != NULL);
 	assert(iLen > 0);
 
-	datetime.getCurrTime(&stTime, &ttGenTime);
+	datetime.getCurrTime(&stTime, &ttGenTime, TIME_IN_LOCALTIME);
 	multiSub.ppMsgs = pMsgs;
 	multiSub.maxElem = NUM_MULTISUB;
 	multiSub.nElem = 0;

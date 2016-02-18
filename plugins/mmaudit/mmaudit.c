@@ -14,7 +14,7 @@
  *
  * File begun on 2012-02-23 by RGerhards
  *
- * Copyright 2013 Adiscon GmbH.
+ * Copyright 2013-2016 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -54,7 +54,6 @@
 
 MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
-MODULE_CNFNAME("mmaudit")
 
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
 
@@ -191,7 +190,6 @@ audit_parse(uchar *buf, struct json_object **jsonRoot)
 	json_object_object_add(*jsonRoot, "data", json);
 
 	while(*buf) {
-//dbgprintf("audit_parse, buf: '%s'\n", buf);
 		CHKiRet(parseName(&buf, name, sizeof(name)));
 		if(*buf != '=') {
 			ABORT_FINALIZE(RS_RET_ERR);
@@ -200,7 +198,6 @@ audit_parse(uchar *buf, struct json_object **jsonRoot)
 		CHKiRet(parseValue(&buf, val, sizeof(val)));
 		jval = json_object_new_string(val);
 		json_object_object_add(json, name, jval);
-dbgprintf("mmaudit: parsed %s=%s\n", name, val);
 	}
 	
 
@@ -227,7 +224,6 @@ CODESTARTdoAction
 	 */
 	buf = getMSG(pMsg);
 
-dbgprintf("mmaudit: msg is '%s'\n", buf);
 	while(*buf && isspace(*buf)) {
 		++buf;
 	}

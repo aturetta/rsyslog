@@ -4,7 +4,7 @@
  * NOTE: read comments in module-template.h for more specifics!
  *
  * Copyright 2011 Nathan Scott.
- * Copyright 2009-2014 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2009-2016 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -155,7 +155,6 @@ ENDcreateInstance
 
 BEGINcreateWrkrInstance
 CODESTARTcreateWrkrInstance
-dbgprintf("omelasticsearch: createWrkrInstance\n");
 	pWrkrData->restURL = NULL;
 	if(pData->bulkmode) {
 		pWrkrData->batch.currTpl1 = NULL;
@@ -168,7 +167,6 @@ dbgprintf("omelasticsearch: createWrkrInstance\n");
 	}
 	CHKiRet(curlSetup(pWrkrData, pWrkrData->pData));
 finalize_it:
-dbgprintf("DDDD: createWrkrInstance,pData %p/%p, pWrkrData %p\n", pData, pWrkrData->pData, pWrkrData);
 ENDcreateWrkrInstance
 
 BEGINisCompatibleWithFeature
@@ -395,6 +393,7 @@ setCurlURL(wrkrInstanceData_t *pWrkrData, instanceData *pData, uchar **tpls)
 	int rLocal;
 	int r;
 	DEFiRet;
+	char separator;
 
 	setBaseURL(pData, &url);
 
@@ -407,17 +406,23 @@ setCurlURL(wrkrInstanceData_t *pWrkrData, instanceData *pData, uchar **tpls)
 		if(r == 0) r = es_addChar(&url, '/');
 		if(r == 0) r = es_addBuf(&url, (char*)searchType, ustrlen(searchType));
 	}
-	if(r == 0) r = es_addChar(&url, '?');
+
+	separator = '?';
 	if(pData->asyncRepl) {
-		if(r == 0) r = es_addBuf(&url, "replication=async&",
-					sizeof("replication=async&")-1);
+		if(r == 0) r = es_addChar(&url, separator);
+		if(r == 0) r = es_addBuf(&url, "replication=async", sizeof("replication=async")-1);
+		separator = '&';
 	}
+
 	if(pData->timeout != NULL) {
+		if(r == 0) r = es_addChar(&url, separator);
 		if(r == 0) r = es_addBuf(&url, "timeout=", sizeof("timeout=")-1);
 		if(r == 0) r = es_addBuf(&url, (char*)pData->timeout, ustrlen(pData->timeout));
-		if(r == 0) r = es_addChar(&url, '&');
+		separator = '&';
 	}
+
 	if(parent != NULL) {
+		if(r == 0) r = es_addChar(&url, separator);
 		if(r == 0) r = es_addBuf(&url, "parent=", sizeof("parent=")-1);
 		if(r == 0) es_addBuf(&url, (char*)parent, ustrlen(parent));
 	}
@@ -563,7 +568,7 @@ getSingleRequest(const char* bulkRequest, char** singleRequest ,char **lastLocat
 	if (getSection(req,&req)!=RS_RET_OK)
 			ABORT_FINALIZE(RS_RET_ERR);
 
-    *singleRequest = (char*) calloc (req - start+ 1 + 1,sizeof(char));/* (req - start+ 1 == length of data + 1 for terminal char)*/
+    *singleRequest = (char*) calloc (req - start+ 1 + 1,1);/* (req - start+ 1 == length of data + 1 for terminal char)*/
     if (*singleRequest==NULL) ABORT_FINALIZE(RS_RET_ERR);
     memcpy(*singleRequest,start,req - start);
     *lastLocation=req;
@@ -1067,7 +1072,6 @@ finalize_it:
 
 BEGINbeginTransaction
 CODESTARTbeginTransaction
-dbgprintf("omelasticsearch: beginTransaction, pWrkrData %p, pData %p\n", pWrkrData, pWrkrData->pData);
 	if(!pWrkrData->pData->bulkmode) {
 		FINALIZE;
 	}
@@ -1088,14 +1092,12 @@ CODESTARTdoAction
 		                 ppString, 1));
 	}
 finalize_it:
-dbgprintf("omelasticsearch: result doAction: %d (bulkmode %d)\n", iRet, pWrkrData->pData->bulkmode);
 ENDdoAction
 
 
 BEGINendTransaction
 	char *cstr = NULL;
 CODESTARTendTransaction
-dbgprintf("omelasticsearch: endTransaction init\n");
 	/* End Transaction only if batch data is not empty */
 	if (pWrkrData->batch.data != NULL ) {
 		cstr = es_str2cstr(pWrkrData->batch.data, NULL);
@@ -1106,7 +1108,6 @@ dbgprintf("omelasticsearch: endTransaction init\n");
 		dbgprintf("omelasticsearch: endTransaction, pWrkrData->batch.data is NULL, nothing to send. \n");
 finalize_it:
 	free(cstr);
-dbgprintf("omelasticsearch: endTransaction done with %d\n", iRet);
 ENDendTransaction
 
 /* elasticsearch POST result string ... useful for debugging */
@@ -1216,7 +1217,7 @@ CODESTARTnewActInst
 		}else if(!strcmp(actpblk.descr[i].name, "interleaved")) {
 			pData->interleaved = pvals[i].val.d.n;
 		} else if(!strcmp(actpblk.descr[i].name, "serverport")) {
-			pData->port = (int) pvals[i].val.d.n, NULL;
+			pData->port = (int) pvals[i].val.d.n;
 		} else if(!strcmp(actpblk.descr[i].name, "uid")) {
 			pData->uid = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(actpblk.descr[i].name, "pwd")) {
