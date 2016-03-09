@@ -168,7 +168,7 @@ ParseTIMESTAMP_loose(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	if(day < 1 || day > 31)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 
-	if(lenStr == 0 || *pszTS++ != 'T')
+	if(lenStr == 0 || *pszTS++ != 'T' || *pszTS++ != ' ')
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 	--lenStr;
 
@@ -192,7 +192,7 @@ ParseTIMESTAMP_loose(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
  
 	EXTRADBGPRINTF("DATE & TIME PARSED\n");
 	/* Now let's see if we have secfrac */
-	if(lenStr > 0 && *pszTS == '.') {
+	if(lenStr > 0 && (*pszTS == '.' || *pszTS == ',')) {
 		--lenStr;
 		uchar *pszStart = ++pszTS;
 		secfrac = srSLMGParseInt32(&pszTS, &lenStr);
