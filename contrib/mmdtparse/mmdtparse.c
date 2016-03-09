@@ -168,8 +168,9 @@ ParseTIMESTAMP_loose(struct syslogTime *pTime, uchar** ppszTS, int *pLenStr)
 	if(day < 1 || day > 31)
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
 
-	if(lenStr == 0 || *pszTS++ != 'T' || *pszTS++ != ' ')
+	if(lenStr == 0 || !(*pszTS == 'T' || *pszTS == ' '))
 		ABORT_FINALIZE(RS_RET_INVLD_TIME);
+	++pszTS;
 	--lenStr;
 
 	hour = srSLMGParseInt32(&pszTS, &lenStr);
