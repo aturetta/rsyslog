@@ -152,7 +152,7 @@ BEGINparse2
 	long long msgcounter;
 	int lenMsg;
 	int i;
-	int iHostname;
+	int iHostname = 0;
 	uchar bufParseTAG[512];
 	uchar bufParseHOSTNAME[CONF_HOSTNAME_MAXSIZE]; /* used by origin */
 CODESTARTparse2
@@ -261,6 +261,7 @@ CODESTARTparse2
 
 	/* if we reach this point, we have a wellformed message and can persist the values */
 	MsgSetTAG(pMsg, bufParseTAG, i);
+	/* if bOriginPresent !=0 iHostname gets initialized */
 	if(pInst->bOriginPresent)
 		MsgSetHOSTNAME(pMsg, bufParseHOSTNAME, iHostname);
 	MsgSetMSGoffs(pMsg, p2parse - pMsg->pszRawMsg);

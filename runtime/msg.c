@@ -539,103 +539,103 @@ propNameToID(uchar *pName, propid_t *pPropID)
 
 	/* sometimes there are aliases to the original MonitoWare
 	 * property names. These come after || in the ifs below. */
-	if(!strcmp((char*) pName, "msg")) {
+	if(!strcasecmp((char*) pName, "msg")) {
 		*pPropID = PROP_MSG;
-	} else if(!strcmp((char*) pName, "timestamp")
-		  || !strcmp((char*) pName, "timereported")) {
+	} else if(!strcasecmp((char*) pName, "timestamp")
+		  || !strcasecmp((char*) pName, "timereported")) {
 		*pPropID = PROP_TIMESTAMP;
-	} else if(!strcmp((char*) pName, "hostname") || !strcmp((char*) pName, "source")) {
+	} else if(!strcasecmp((char*) pName, "hostname") || !strcasecmp((char*) pName, "source")) {
 		*pPropID = PROP_HOSTNAME;
-	} else if(!strcmp((char*) pName, "syslogtag")) {
+	} else if(!strcasecmp((char*) pName, "syslogtag")) {
 		*pPropID = PROP_SYSLOGTAG;
-	} else if(!strcmp((char*) pName, "rawmsg")) {
+	} else if(!strcasecmp((char*) pName, "rawmsg")) {
 		*pPropID = PROP_RAWMSG;
-	} else if(!strcmp((char*) pName, "rawmsg-after-pri")) {
+	} else if(!strcasecmp((char*) pName, "rawmsg-after-pri")) {
 		*pPropID = PROP_RAWMSG_AFTER_PRI;
-	} else if(!strcmp((char*) pName, "inputname")) {
+	} else if(!strcasecmp((char*) pName, "inputname")) {
 		*pPropID = PROP_INPUTNAME;
-	} else if(!strcmp((char*) pName, "fromhost")) {
+	} else if(!strcasecmp((char*) pName, "fromhost")) {
 		*pPropID = PROP_FROMHOST;
-	} else if(!strcmp((char*) pName, "fromhost-ip")) {
+	} else if(!strcasecmp((char*) pName, "fromhost-ip")) {
 		*pPropID = PROP_FROMHOST_IP;
-	} else if(!strcmp((char*) pName, "pri")) {
+	} else if(!strcasecmp((char*) pName, "pri")) {
 		*pPropID = PROP_PRI;
-	} else if(!strcmp((char*) pName, "pri-text")) {
+	} else if(!strcasecmp((char*) pName, "pri-text")) {
 		*pPropID = PROP_PRI_TEXT;
-	} else if(!strcmp((char*) pName, "iut")) {
+	} else if(!strcasecmp((char*) pName, "iut")) {
 		*pPropID = PROP_IUT;
-	} else if(!strcmp((char*) pName, "syslogfacility")) {
+	} else if(!strcasecmp((char*) pName, "syslogfacility")) {
 		*pPropID = PROP_SYSLOGFACILITY;
-	} else if(!strcmp((char*) pName, "syslogfacility-text")) {
+	} else if(!strcasecmp((char*) pName, "syslogfacility-text")) {
 		*pPropID = PROP_SYSLOGFACILITY_TEXT;
-	} else if(!strcmp((char*) pName, "syslogseverity") || !strcmp((char*) pName, "syslogpriority")) {
+	} else if(!strcasecmp((char*) pName, "syslogseverity") || !strcasecmp((char*) pName, "syslogpriority")) {
 		*pPropID = PROP_SYSLOGSEVERITY;
-	} else if(!strcmp((char*) pName, "syslogseverity-text") || !strcmp((char*) pName, "syslogpriority-text")) {
+	} else if(!strcasecmp((char*) pName, "syslogseverity-text") || !strcasecmp((char*) pName, "syslogpriority-text")) {
 		*pPropID = PROP_SYSLOGSEVERITY_TEXT;
-	} else if(!strcmp((char*) pName, "timegenerated")) {
+	} else if(!strcasecmp((char*) pName, "timegenerated")) {
 		*pPropID = PROP_TIMEGENERATED;
-	} else if(!strcmp((char*) pName, "programname")) {
+	} else if(!strcasecmp((char*) pName, "programname")) {
 		*pPropID = PROP_PROGRAMNAME;
-	} else if(!strcmp((char*) pName, "protocol-version")) {
+	} else if(!strcasecmp((char*) pName, "protocol-version")) {
 		*pPropID = PROP_PROTOCOL_VERSION;
-	} else if(!strcmp((char*) pName, "structured-data")) {
+	} else if(!strcasecmp((char*) pName, "structured-data")) {
 		*pPropID = PROP_STRUCTURED_DATA;
-	} else if(!strcmp((char*) pName, "app-name")) {
+	} else if(!strcasecmp((char*) pName, "app-name")) {
 		*pPropID = PROP_APP_NAME;
-	} else if(!strcmp((char*) pName, "procid")) {
+	} else if(!strcasecmp((char*) pName, "procid")) {
 		*pPropID = PROP_PROCID;
-	} else if(!strcmp((char*) pName, "msgid")) {
+	} else if(!strcasecmp((char*) pName, "msgid")) {
 		*pPropID = PROP_MSGID;
-	} else if(!strcmp((char*) pName, "jsonmesg")) {
+	} else if(!strcasecmp((char*) pName, "jsonmesg")) {
 		*pPropID = PROP_JSONMESG;
-	} else if(!strcmp((char*) pName, "parsesuccess")) {
+	} else if(!strcasecmp((char*) pName, "parsesuccess")) {
 		*pPropID = PROP_PARSESUCCESS;
 #ifdef USE_LIBUUID
-	} else if(!strcmp((char*) pName, "uuid")) {
+	} else if(!strcasecmp((char*) pName, "uuid")) {
 		*pPropID = PROP_UUID;
 #endif
 	/* here start system properties (those, that do not relate to the message itself */
-	} else if(!strcmp((char*) pName, "$now")) {
+	} else if(!strcasecmp((char*) pName, "$NOW")) {
 		*pPropID = PROP_SYS_NOW;
-	} else if(!strcmp((char*) pName, "$year")) {
+	} else if(!strcasecmp((char*) pName, "$YEAR")) {
 		*pPropID = PROP_SYS_YEAR;
-	} else if(!strcmp((char*) pName, "$month")) {
+	} else if(!strcasecmp((char*) pName, "$MONTH")) {
 		*pPropID = PROP_SYS_MONTH;
-	} else if(!strcmp((char*) pName, "$day")) {
+	} else if(!strcasecmp((char*) pName, "$DAY")) {
 		*pPropID = PROP_SYS_DAY;
-	} else if(!strcmp((char*) pName, "$hour")) {
+	} else if(!strcasecmp((char*) pName, "$HOUR")) {
 		*pPropID = PROP_SYS_HOUR;
-	} else if(!strcmp((char*) pName, "$hhour")) {
+	} else if(!strcasecmp((char*) pName, "$HHOUR")) {
 		*pPropID = PROP_SYS_HHOUR;
-	} else if(!strcmp((char*) pName, "$qhour")) {
+	} else if(!strcasecmp((char*) pName, "$QHOUR")) {
 		*pPropID = PROP_SYS_QHOUR;
-	} else if(!strcmp((char*) pName, "$minute")) {
+	} else if(!strcasecmp((char*) pName, "$MINUTE")) {
 		*pPropID = PROP_SYS_MINUTE;
-	} else if(!strcmp((char*) pName, "$now-utc")) {
-		*pPropID = PROP_SYS_NOW;
-	} else if(!strcmp((char*) pName, "$year-utc")) {
+	} else if(!strcasecmp((char*) pName, "$now-utc")) {
+		*pPropID = PROP_SYS_NOW_UTC;
+	} else if(!strcasecmp((char*) pName, "$year-utc")) {
 		*pPropID = PROP_SYS_YEAR_UTC;
-	} else if(!strcmp((char*) pName, "$month-utc")) {
+	} else if(!strcasecmp((char*) pName, "$month-utc")) {
 		*pPropID = PROP_SYS_MONTH_UTC;
-	} else if(!strcmp((char*) pName, "$day-utc")) {
+	} else if(!strcasecmp((char*) pName, "$day-utc")) {
 		*pPropID = PROP_SYS_DAY_UTC;
-	} else if(!strcmp((char*) pName, "$hour-utc")) {
+	} else if(!strcasecmp((char*) pName, "$hour-utc")) {
 		*pPropID = PROP_SYS_HOUR_UTC;
-	} else if(!strcmp((char*) pName, "$hhour-utc")) {
+	} else if(!strcasecmp((char*) pName, "$hhour-utc")) {
 		*pPropID = PROP_SYS_HHOUR_UTC;
-	} else if(!strcmp((char*) pName, "$qhour-utc")) {
+	} else if(!strcasecmp((char*) pName, "$qhour-utc")) {
 		*pPropID = PROP_SYS_QHOUR_UTC;
-	} else if(!strcmp((char*) pName, "$minute-utc")) {
+	} else if(!strcasecmp((char*) pName, "$minute-utc")) {
 		*pPropID = PROP_SYS_MINUTE_UTC;
-	} else if(!strcmp((char*) pName, "$myhostname")) {
+	} else if(!strcasecmp((char*) pName, "$MYHOSTNAME")) {
 		*pPropID = PROP_SYS_MYHOSTNAME;
-	} else if(!strcmp((char*) pName, "$!all-json")) {
+	} else if(!strcasecmp((char*) pName, "$!all-json")) {
 		*pPropID = PROP_CEE_ALL_JSON;
-	} else if(!strcmp((char*) pName, "$!all-json-plain")) {
+	} else if(!strcasecmp((char*) pName, "$!all-json-plain")) {
 		*pPropID = PROP_CEE_ALL_JSON_PLAIN;
-	} else if(!strcmp((char*) pName, "$bom")) {
+	} else if(!strcasecmp((char*) pName, "$BOM")) {
 		*pPropID = PROP_SYS_BOM;
-	} else if(!strcmp((char*) pName, "$uptime")) {
+	} else if(!strcasecmp((char*) pName, "$UPTIME")) {
 		*pPropID = PROP_SYS_UPTIME;
 	} else if(!strncmp((char*) pName, "$!", 2) || pName[0] == '!') {
 		*pPropID = PROP_CEE;
@@ -667,6 +667,8 @@ uchar *propIDToName(propid_t propID)
 			return UCHAR_CONSTANT("syslogtag");
 		case PROP_RAWMSG:
 			return UCHAR_CONSTANT("rawmsg");
+		case PROP_RAWMSG_AFTER_PRI:
+			return UCHAR_CONSTANT("rawmsg-after-pri");
 		case PROP_INPUTNAME:
 			return UCHAR_CONSTANT("inputname");
 		case PROP_FROMHOST:
@@ -705,6 +707,10 @@ uchar *propIDToName(propid_t propID)
 			return UCHAR_CONSTANT("jsonmesg");
 		case PROP_PARSESUCCESS:
 			return UCHAR_CONSTANT("parsesuccess");
+#ifdef USE_LIBUUID
+		case PROP_UUID:
+			return UCHAR_CONSTANT("uuid");
+#endif
 		case PROP_SYS_NOW:
 			return UCHAR_CONSTANT("$NOW");
 		case PROP_SYS_YEAR:
@@ -722,35 +728,37 @@ uchar *propIDToName(propid_t propID)
 		case PROP_SYS_MINUTE:
 			return UCHAR_CONSTANT("$MINUTE");
 		case PROP_SYS_NOW_UTC:
-			return UCHAR_CONSTANT("$NOW_UTC");
+			return UCHAR_CONSTANT("$NOW-UTC");
 		case PROP_SYS_YEAR_UTC:
-			return UCHAR_CONSTANT("$YEAR_UTC");
+			return UCHAR_CONSTANT("$YEAR-UTC");
 		case PROP_SYS_MONTH_UTC:
-			return UCHAR_CONSTANT("$MONTH_UTC");
+			return UCHAR_CONSTANT("$MONTH-UTC");
 		case PROP_SYS_DAY_UTC:
-			return UCHAR_CONSTANT("$DAY_UTC");
+			return UCHAR_CONSTANT("$DAY-UTC");
 		case PROP_SYS_HOUR_UTC:
-			return UCHAR_CONSTANT("$HOUR_UTC");
+			return UCHAR_CONSTANT("$HOUR-UTC");
 		case PROP_SYS_HHOUR_UTC:
-			return UCHAR_CONSTANT("$HHOUR_UTC");
+			return UCHAR_CONSTANT("$HHOUR-UTC");
 		case PROP_SYS_QHOUR_UTC:
-			return UCHAR_CONSTANT("$QHOUR_UTC");
+			return UCHAR_CONSTANT("$QHOUR-UTC");
 		case PROP_SYS_MINUTE_UTC:
-			return UCHAR_CONSTANT("$MINUTE_UTC");
+			return UCHAR_CONSTANT("$MINUTE-UTC");
 		case PROP_SYS_MYHOSTNAME:
 			return UCHAR_CONSTANT("$MYHOSTNAME");
-		case PROP_CEE:
-			return UCHAR_CONSTANT("*CEE-based property*");
-		case PROP_LOCAL_VAR:
-			return UCHAR_CONSTANT("*LOCAL_VARIABLE*");
 		case PROP_CEE_ALL_JSON:
 			return UCHAR_CONSTANT("$!all-json");
 		case PROP_CEE_ALL_JSON_PLAIN:
 			return UCHAR_CONSTANT("$!all-json-plain");
 		case PROP_SYS_BOM:
 			return UCHAR_CONSTANT("$BOM");
-		case PROP_UUID:
-			return UCHAR_CONSTANT("uuid");
+		case PROP_SYS_UPTIME:
+			return UCHAR_CONSTANT("$UPTIME");
+		case PROP_CEE:
+			return UCHAR_CONSTANT("*CEE-based property*");
+		case PROP_LOCAL_VAR:
+			return UCHAR_CONSTANT("*LOCAL_VARIABLE*");
+		case PROP_GLOBAL_VAR:
+			return UCHAR_CONSTANT("*GLOBAL_VARIABLE*");
 		default:
 			return UCHAR_CONSTANT("*invalid property id*");
 	}
@@ -819,9 +827,7 @@ static inline rsRetVal msgBaseConstruct(msg_t **ppThis)
 	pM->rcvFrom.pRcvFrom = NULL;
 	pM->pRuleset = NULL;
 	pM->json = NULL;
-	pthread_mutex_init(&pM->mut_json, NULL);
 	pM->localvars = NULL;
-	pthread_mutex_init(&pM->mut_localvars, NULL);
 	pM->dfltTZ[0] = '\0';
 	memset(&pM->tRcvdAt, 0, sizeof(pM->tRcvdAt));
 	memset(&pM->tTIMESTAMP, 0, sizeof(pM->tTIMESTAMP));
@@ -967,10 +973,8 @@ CODESTARTobjDestruct(msg)
 			rsCStrDestruct(&pThis->pCSMSGID);
 		if(pThis->json != NULL)
 			json_object_put(pThis->json);
-		pthread_mutex_destroy(&pThis->mut_json);
 		if(pThis->localvars != NULL)
 			json_object_put(pThis->localvars);
-		pthread_mutex_destroy(&pThis->mut_localvars);
 		if(pThis->pszUUID != NULL)
 			free(pThis->pszUUID);
 #	ifndef HAVE_ATOMIC_BUILTINS
@@ -2845,7 +2849,6 @@ getJSONPropVal(msg_t * const pMsg, msgPropDescr_t *pProp, uchar **pRes, rs_size_
 	struct json_object *jroot;
 	struct json_object *parent;
 	struct json_object *field;
-	pthread_mutex_t *mut = NULL;
 	DEFiRet;
 
 	if(*pbMustBeFreed)
@@ -2854,22 +2857,20 @@ getJSONPropVal(msg_t * const pMsg, msgPropDescr_t *pProp, uchar **pRes, rs_size_
 
 	if(pProp->id == PROP_CEE) {
 		jroot = pMsg->json;
-		mut = &pMsg->mut_json;
+		MsgLock(pMsg);
 	} else if(pProp->id == PROP_LOCAL_VAR) {
 		jroot = pMsg->localvars;
-		mut = &pMsg->mut_localvars;
+		MsgLock(pMsg);
 	} else if(pProp->id == PROP_GLOBAL_VAR) {
-		mut = &glblVars_lock;
 		jroot = global_var_root;
+		pthread_mutex_lock(&glblVars_lock);
 	} else {
 		DBGPRINTF("msgGetJSONPropVal; invalid property id %d\n",
 			  pProp->id);
 		ABORT_FINALIZE(RS_RET_NOT_FOUND);
 	}
-	if(mut != NULL)
-		pthread_mutex_lock(mut);
 
-	if(jroot == NULL) goto finalize_it;
+	if(jroot == NULL) FINALIZE;
 
 	if(!strcmp((char*)pProp->name, "!")) {
 		field = jroot;
@@ -2886,8 +2887,10 @@ getJSONPropVal(msg_t * const pMsg, msgPropDescr_t *pProp, uchar **pRes, rs_size_
 	}
 
 finalize_it:
-	if(mut != NULL)
-		pthread_mutex_unlock(mut);
+	if(pProp->id == PROP_GLOBAL_VAR)
+		pthread_mutex_unlock(&glblVars_lock);
+	else
+		MsgUnlock(pMsg);
 	if(*pRes == NULL) {
 		/* could not find any value, so set it to empty */
 		*pRes = (unsigned char*)"";
@@ -2915,27 +2918,24 @@ msgGetJSONPropJSONorString(msg_t * const pMsg, msgPropDescr_t *pProp, struct jso
 	struct json_object *jroot;
 	uchar *leaf;
 	struct json_object *parent;
-	pthread_mutex_t *mut = NULL;
 	DEFiRet;
 
 	*pjson = NULL, *pcstr = NULL;
 
 	if(pProp->id == PROP_CEE) {
 		jroot = pMsg->json;
-		mut = &pMsg->mut_json;
+		MsgLock(pMsg);
 	} else if(pProp->id == PROP_LOCAL_VAR) {
 		jroot = pMsg->localvars;
-		mut = &pMsg->mut_json;
+		MsgLock(pMsg);
 	} else if(pProp->id == PROP_GLOBAL_VAR) {
-		mut = &glblVars_lock;
 		jroot = global_var_root;
+		pthread_mutex_lock(&glblVars_lock);
 	} else {
-		DBGPRINTF("msgGetJSONPropJSON; invalid property id %d\n",
+		DBGPRINTF("msgGetJSONPropJSONorString; invalid property id %d\n",
 			  pProp->id);
 		ABORT_FINALIZE(RS_RET_NOT_FOUND);
 	}
-	if(mut != NULL)
-		pthread_mutex_lock(mut);
 
 	if(!strcmp((char*)pProp->name, "!")) {
 		*pjson = jroot;
@@ -2960,8 +2960,10 @@ finalize_it:
 	/* we need a deep copy, as another thread may modify the object */
 	if(*pjson != NULL)
 		*pjson = jsonDeepCopy(*pjson);
-	if(mut != NULL)
-		pthread_mutex_unlock(mut);
+	if(pProp->id == PROP_GLOBAL_VAR)
+		pthread_mutex_unlock(&glblVars_lock);
+	else
+		MsgUnlock(pMsg);
 	RETiRet;
 }
 
@@ -2974,27 +2976,24 @@ msgGetJSONPropJSON(msg_t * const pMsg, msgPropDescr_t *pProp, struct json_object
 	struct json_object *jroot;
 	uchar *leaf;
 	struct json_object *parent;
-	pthread_mutex_t *mut = NULL;
 	DEFiRet;
 
 	*pjson = NULL;
 
 	if(pProp->id == PROP_CEE) {
 		jroot = pMsg->json;
-		mut = &pMsg->mut_json;
+		MsgLock(pMsg);
 	} else if(pProp->id == PROP_LOCAL_VAR) {
 		jroot = pMsg->localvars;
-		mut = &pMsg->mut_json;
+		MsgLock(pMsg);
 	} else if(pProp->id == PROP_GLOBAL_VAR) {
-		mut = &glblVars_lock;
 		jroot = global_var_root;
+		pthread_mutex_lock(&glblVars_lock);
 	} else {
 		DBGPRINTF("msgGetJSONPropJSON; invalid property id %d\n",
 			  pProp->id);
 		ABORT_FINALIZE(RS_RET_NOT_FOUND);
 	}
-	if(mut != NULL)
-		pthread_mutex_lock(mut);
 
 	if(!strcmp((char*)pProp->name, "!")) {
 		*pjson = jroot;
@@ -3010,8 +3009,10 @@ finalize_it:
 	/* we need a deep copy, as another thread may modify the object */
 	if(*pjson != NULL)
 		*pjson = jsonDeepCopy(*pjson);
-	if(mut != NULL)
-		pthread_mutex_unlock(mut);
+	if(pProp->id == PROP_GLOBAL_VAR)
+		pthread_mutex_unlock(&glblVars_lock);
+	else
+		MsgUnlock(pMsg);
 	RETiRet;
 }
 
@@ -3495,7 +3496,7 @@ uchar *MsgGetProp(msg_t *__restrict__ const pMsg, struct templateEntry *__restri
 				*pbMustBeFreed = 0;
 			} else {
 				const char *jstr;
-				pthread_mutex_lock(&pMsg->mut_json);
+				MsgLock(pMsg);
 #ifdef HAVE_JSON_OBJECT_TO_JSON_STRING_EXT
 				int jflag = 0;
 				if(pProp->id == PROP_CEE_ALL_JSON) {
@@ -3507,7 +3508,7 @@ uchar *MsgGetProp(msg_t *__restrict__ const pMsg, struct templateEntry *__restri
 #else
 				jstr = json_object_to_json_string(pMsg->json);
 #endif
-				pthread_mutex_unlock(&pMsg->mut_json);
+				MsgUnlock(pMsg);
 				if(jstr == NULL) {
 					RET_OUT_OF_MEMORY;
 				}
@@ -4488,28 +4489,26 @@ msgAddJSON(msg_t * const pM, uchar *name, struct json_object *json, int force_re
 	struct json_object *parent, *leafnode;
 	struct json_object *given = NULL;
 	uchar *leaf;
-	pthread_mutex_t *mut = NULL;
 	DEFiRet;
 
 	if(name[0] == '!') {
 		pjroot = &pM->json;
-		mut = &pM->mut_json;
+		MsgLock(pM);
 	} else if(name[0] == '.') {
 		pjroot = &pM->localvars;
-		mut = &pM->mut_localvars;
+		MsgLock(pM);
 	} else if (name[0] == '/') { /* globl var */
 		pjroot = &global_var_root;
-		mut = &glblVars_lock;
 		if (sharedReference) {
 			given = json;
 			json = jsonDeepCopy(json);
 			json_object_put(given);
 		}
+		pthread_mutex_lock(&glblVars_lock);
 	} else {
 		DBGPRINTF("Passed name %s is unknown kind of variable (It is not CEE, Local or Global variable).", name);
 		ABORT_FINALIZE(RS_RET_INVLD_SETOP);
 	}
-	pthread_mutex_lock(mut);
 
 	if(name[1] == '\0') { /* full tree? */
 		if(*pjroot == NULL)
@@ -4560,8 +4559,10 @@ msgAddJSON(msg_t * const pM, uchar *name, struct json_object *json, int force_re
 	}
 
 finalize_it:
-	if(mut != NULL)
-		pthread_mutex_unlock(mut);
+	if(name[0] == '/')
+		pthread_mutex_unlock(&glblVars_lock);
+	else
+		MsgUnlock(pM);
 	RETiRet;
 }
 
@@ -4572,24 +4573,22 @@ msgDelJSON(msg_t * const pM, uchar *name)
 	struct json_object **jroot;
 	struct json_object *parent, *leafnode;
 	uchar *leaf;
-	pthread_mutex_t *mut = NULL;
 	DEFiRet;
 
 	if(name[0] == '!') {
 		jroot = &pM->json;
-		mut = &pM->mut_json;
+		MsgLock(pM);
 	} else if(name[0] == '.') {
 		jroot = &pM->localvars;
-		mut = &pM->mut_localvars;
+		MsgLock(pM);
 	} else if (name[0] == '/') { /* globl var */
 		jroot = &global_var_root;
-		mut = &glblVars_lock;
+		pthread_mutex_lock(&glblVars_lock);
 	} else {
 		DBGPRINTF("Passed name %s is unknown kind of variable (It is not CEE, "
 			  "Local or Global variable).", name);
 		ABORT_FINALIZE(RS_RET_INVLD_SETOP);
 	}
-	pthread_mutex_lock(mut);
 
 	if(*jroot == NULL) {
 		DBGPRINTF("msgDelJSONVar; jroot empty in unset for property %s\n",
@@ -4621,8 +4620,10 @@ msgDelJSON(msg_t * const pM, uchar *name)
 	}
 
 finalize_it:
-	if(mut != NULL)
-		pthread_mutex_unlock(mut);
+	if(name[0] == '/')
+		pthread_mutex_unlock(&glblVars_lock);
+	else
+		MsgUnlock(pM);
 	RETiRet;
 }
 

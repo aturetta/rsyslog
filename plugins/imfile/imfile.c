@@ -102,6 +102,7 @@ typedef struct lstn_s {
 	int iFacility;
 	int iSeverity;
 	int maxLinesAtOnce;
+	uint32_t trimLineOverBytes;
 	int nRecords; /**< How many records did we process before persisting the stream? */
 	int iPersistStateInterval; /**< how often should state be persisted? (0=on close only) */
 	strm_t *pStrm;	/* its stream (NULL if not assigned) */
@@ -114,6 +115,7 @@ typedef struct lstn_s {
 	sbool escapeLF;	/* escape LF inside the MSG content? */
 	sbool reopenOnTruncate;
 	sbool addMetadata;
+	sbool addCeeTag;
 	ruleset_t *pRuleset;	/* ruleset to bind listener to (use system default if unspecified) */
 	ratelimit_t *ratelimiter;
 	multi_submit_t multiSub;
@@ -130,6 +132,7 @@ static struct configSettings_s {
 	int iSeverity;  /* notice, as of rfc 3164 */
 	int readMode;  /* mode to use for ReadMultiLine call */
 	int64 maxLinesAtOnce;	/* how many lines to process in a row? */
+	uint32_t trimLineOverBytes;  /* 0: never trim line, positive number: trim line if over bytes */
 } cs;
 
 struct instanceConf_s {
@@ -148,8 +151,10 @@ struct instanceConf_s {
 	uchar *startRegex;
 	sbool escapeLF;
 	sbool reopenOnTruncate;
+	sbool addCeeTag;
 	sbool addMetadata;
 	int maxLinesAtOnce;
+	uint32_t trimLineOverBytes;
 	ruleset_t *pBindRuleset;	/* ruleset to bind listener to (use system default if unspecified) */
 	struct instanceConf_s *next;
 };
@@ -263,11 +268,13 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "escapelf", eCmdHdlrBinary, 0 },
 	{ "reopenontruncate", eCmdHdlrBinary, 0 },
 	{ "maxlinesatonce", eCmdHdlrInt, 0 },
+	{ "trimlineoverbytes", eCmdHdlrInt, 0 },
 	{ "maxsubmitatonce", eCmdHdlrInt, 0 },
 	{ "removestateondelete", eCmdHdlrBinary, 0 },
 	{ "persiststateinterval", eCmdHdlrInt, 0 },
 	{ "deletestateonfiledelete", eCmdHdlrBinary, 0 },
 	{ "addmetadata", eCmdHdlrBinary, 0 },
+	{ "addceetag", eCmdHdlrBinary, 0 },
 	{ "statefile", eCmdHdlrString, CNFPARAM_DEPRECATED }
 };
 static struct cnfparamblk inppblk =
@@ -358,7 +365,7 @@ wdmapAdd(int wd, const int dirIdx, lstn_t *const pLstn)
 		; 	/* just scan */
 	if(i >= 0 && wdmap[i].wd == wd) {
 		DBGPRINTF("imfile: wd %d already in wdmap!\n", wd);
-		FINALIZE;
+		ABORT_FINALIZE(RS_RET_FILE_ALREADY_IN_TABLE);
 	}
 	++i;
 	/* i now points to the entry that is to be moved upwards (or end of map) */
@@ -456,7 +463,19 @@ static rsRetVal enqLine(lstn_t *const __restrict__ pLstn,
 	CHKiRet(msgConstruct(&pMsg));
 	MsgSetFlowControlType(pMsg, eFLOWCTL_FULL_DELAY);
 	MsgSetInputName(pMsg, pInputName);
-	MsgSetRawMsg(pMsg, (char*)rsCStrGetSzStrNoNULL(cstrLine), cstrLen(cstrLine));
+	if (pLstn->addCeeTag) {
+		size_t msgLen = cstrLen(cstrLine);
+		char *ceeToken = "@cee:";
+		size_t ceeMsgSize = msgLen + strlen(ceeToken);
+		char *ceeMsg;
+		CHKmalloc(ceeMsg = MALLOC(ceeMsgSize));
+		strcpy(ceeMsg, ceeToken);
+		strcat(ceeMsg, (char*)rsCStrGetSzStrNoNULL(cstrLine));
+		MsgSetRawMsg(pMsg, ceeMsg, ceeMsgSize);
+		free(ceeMsg);
+	} else {
+		MsgSetRawMsg(pMsg, (char*)rsCStrGetSzStrNoNULL(cstrLine), cstrLen(cstrLine));
+	}
 	MsgSetMSGoffs(pMsg, 0);	/* we do not have a header... */
 	MsgSetHOSTNAME(pMsg, glbl.GetLocalHostName(), ustrlen(glbl.GetLocalHostName()));
 	MsgSetTAG(pMsg, pLstn->pszTag, pLstn->lenTag);
@@ -588,7 +607,7 @@ pollFile(lstn_t *pLstn, int *pbHadFileData)
 		if(pLstn->maxLinesAtOnce != 0 && nProcessed >= pLstn->maxLinesAtOnce)
 			break;
 		if(pLstn->startRegex == NULL) {
-			CHKiRet(strm.ReadLine(pLstn->pStrm, &pCStr, pLstn->readMode, pLstn->escapeLF));
+			CHKiRet(strm.ReadLine(pLstn->pStrm, &pCStr, pLstn->readMode, pLstn->escapeLF, pLstn->trimLineOverBytes));
 		} else {
 			CHKiRet(strmReadMultiLine(pLstn->pStrm, &pCStr, &pLstn->end_preg, pLstn->escapeLF));
 		}
@@ -636,6 +655,7 @@ createInstance(instanceConf_t **pinst)
 	inst->iSeverity = 5;
 	inst->iFacility = 128;
 	inst->maxLinesAtOnce = 0;
+	inst->trimLineOverBytes = 0;
 	inst->iPersistStateInterval = 0;
 	inst->readMode = 0;
 	inst->startRegex = NULL;
@@ -643,6 +663,7 @@ createInstance(instanceConf_t **pinst)
 	inst->escapeLF = 1;
 	inst->reopenOnTruncate = 0;
 	inst->addMetadata = ADD_METADATA_UNSPECIFIED;
+	inst->addCeeTag = 0;
 
 	/* node created, let's add to config */
 	if(loadModConf->tail == NULL) {
@@ -665,10 +686,12 @@ static int
 getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path)
 {
 	int i;
+	int found = 0;
 	const int lenName = ustrlen(path);
 	for(i = lenName ; i >= 0 ; --i) {
 		if(path[i] == '/') {
 			/* found basename component */
+			found = 1;
 			if(i == lenName)
 				basen[0] = '\0';
 			else {
@@ -677,7 +700,11 @@ getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path)
 			break;
 		}
 	}
-	return i;
+	if (found == 1)
+		return i;
+	else {
+		return -1;
+	}
 }
 
 /* this function checks instance parameters and does some required pre-processing
@@ -703,6 +730,12 @@ checkInstance(instanceConf_t *inst)
 		ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
 
 	i = getBasename(basen, inst->pszFileName);
+	if (i == -1) {
+		errmsg.LogError(0, RS_RET_CONFIG_ERROR, "imfile: file path '%s' does not include a basename component",
+			inst->pszFileName);
+		ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
+	}
+	
 	memcpy(dirn, inst->pszFileName, i); /* do not copy slash */
 	dirn[i] = '\0';
 	CHKmalloc(inst->pszFileBaseName = (uchar*) strdup((char*)basen));
@@ -767,11 +800,13 @@ addInstance(void __attribute__((unused)) *pVal, uchar *pNewVal)
 			inst->maxLinesAtOnce = cs.maxLinesAtOnce;
 		}
 	}
+	inst->trimLineOverBytes = cs.trimLineOverBytes;
 	inst->iPersistStateInterval = cs.iPersistStateInterval;
 	inst->readMode = cs.readMode;
 	inst->escapeLF = 0;
 	inst->reopenOnTruncate = 0;
 	inst->addMetadata = 0;
+	inst->addCeeTag = 0;
 	inst->bRMStateOnDel = 0;
 
 	CHKiRet(checkInstance(inst));
@@ -870,6 +905,7 @@ lstnDup(lstn_t **ppExisting, uchar *const __restrict__ newname)
 	pThis->iSeverity = existing->iSeverity;
 	pThis->iFacility = existing->iFacility;
 	pThis->maxLinesAtOnce = existing->maxLinesAtOnce;
+	pThis->trimLineOverBytes = existing->trimLineOverBytes;
 	pThis->iPersistStateInterval = existing->iPersistStateInterval;
 	pThis->readMode = existing->readMode;
 	pThis->startRegex = existing->startRegex; /* no strdup, as it is read-only */
@@ -883,6 +919,7 @@ lstnDup(lstn_t **ppExisting, uchar *const __restrict__ newname)
 	pThis->escapeLF = existing->escapeLF;
 	pThis->reopenOnTruncate = existing->reopenOnTruncate;
 	pThis->addMetadata = existing->addMetadata;
+	pThis->addCeeTag = existing->addCeeTag;
 	pThis->pRuleset = existing->pRuleset;
 	pThis->nRecords = 0;
 	pThis->pStrm = NULL;
@@ -937,6 +974,7 @@ addListner(instanceConf_t *inst)
 	pThis->iSeverity = inst->iSeverity;
 	pThis->iFacility = inst->iFacility;
 	pThis->maxLinesAtOnce = inst->maxLinesAtOnce;
+	pThis->trimLineOverBytes = inst->trimLineOverBytes;
 	pThis->iPersistStateInterval = inst->iPersistStateInterval;
 	pThis->readMode = inst->readMode;
 	pThis->startRegex = inst->startRegex; /* no strdup, as it is read-only */
@@ -950,6 +988,7 @@ addListner(instanceConf_t *inst)
 	pThis->reopenOnTruncate = inst->reopenOnTruncate;
 	pThis->addMetadata = (inst->addMetadata == ADD_METADATA_UNSPECIFIED) ?
 			       hasWildcard : inst->addMetadata;
+	pThis->addCeeTag = inst->addCeeTag;
 	pThis->pRuleset = inst->pBindRuleset;
 	pThis->nRecords = 0;
 	pThis->pStrm = NULL;
@@ -1004,6 +1043,8 @@ CODESTARTnewInpInst
 			inst->bRMStateOnDel = (sbool) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "addmetadata")) {
 			inst->addMetadata = (sbool) pvals[i].val.d.n;
+		} else if (!strcmp(inppblk.descr[i].name, "addceetag")) {
+			inst->addCeeTag = (sbool) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "escapelf")) {
 			inst->escapeLF = (sbool) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "reopenontruncate")) {
@@ -1017,6 +1058,8 @@ CODESTARTnewInpInst
 			} else {
 				inst->maxLinesAtOnce = pvals[i].val.d.n;
 			}
+		} else if(!strcmp(inppblk.descr[i].name, "trimlineoverbytes")) {
+			inst->trimLineOverBytes = pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "persiststateinterval")) {
 			inst->iPersistStateInterval = pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "maxsubmitatonce")) {
@@ -1057,6 +1100,7 @@ CODESTARTbeginCnfLoad
 	cs.iSeverity = 5;
 	cs.readMode = 0;
 	cs.maxLinesAtOnce = 10240;
+	cs.trimLineOverBytes = 0;
 ENDbeginCnfLoad
 
 
@@ -1479,6 +1523,7 @@ done:	return;
 static void
 startLstnFile(lstn_t *const __restrict__ pLstn)
 {
+	rsRetVal localRet;
 	const int wd = inotify_add_watch(ino_fd, (char*)pLstn->pszFileName, IN_MODIFY);
 	if(wd < 0) {
 		char errStr[512];
@@ -1488,7 +1533,10 @@ startLstnFile(lstn_t *const __restrict__ pLstn)
 			  pLstn->pszFileName, errStr);
 		goto done;
 	}
-	wdmapAdd(wd, -1, pLstn);
+	if((localRet = wdmapAdd(wd, -1, pLstn)) != RS_RET_OK) {
+		DBGPRINTF("imfile: error %d adding file to wdmap, ignoring\n", localRet);
+		goto done;
+	}
 	DBGPRINTF("imfile: watch %d added for file %s\n", wd, pLstn->pszFileName);
 	dirsAddFile(pLstn, ACTIVE_FILE);
 	pollFile(pLstn, NULL);
@@ -1586,35 +1634,35 @@ static void
 in_dbg_showEv(struct inotify_event *ev)
 {
 	if(ev->mask & IN_IGNORED) {
-		DBGPRINTF("watch was REMOVED\n");
+		DBGPRINTF("INOTIFY event: watch was REMOVED\n");
 	} else if(ev->mask & IN_MODIFY) {
-		DBGPRINTF("watch was MODIFID\n");
+		DBGPRINTF("INOTIFY event: watch was MODIFID\n");
 	} else if(ev->mask & IN_ACCESS) {
-		DBGPRINTF("watch IN_ACCESS\n");
+		DBGPRINTF("INOTIFY event: watch IN_ACCESS\n");
 	} else if(ev->mask & IN_ATTRIB) {
-		DBGPRINTF("watch IN_ATTRIB\n");
+		DBGPRINTF("INOTIFY event: watch IN_ATTRIB\n");
 	} else if(ev->mask & IN_CLOSE_WRITE) {
-		DBGPRINTF("watch IN_CLOSE_WRITE\n");
+		DBGPRINTF("INOTIFY event: watch IN_CLOSE_WRITE\n");
 	} else if(ev->mask & IN_CLOSE_NOWRITE) {
-		DBGPRINTF("watch IN_CLOSE_NOWRITE\n");
+		DBGPRINTF("INOTIFY event: watch IN_CLOSE_NOWRITE\n");
 	} else if(ev->mask & IN_CREATE) {
-		DBGPRINTF("file was CREATED: %s\n", ev->name);
+		DBGPRINTF("INOTIFY event: file was CREATED: %s\n", ev->name);
 	} else if(ev->mask & IN_DELETE) {
-		DBGPRINTF("watch IN_DELETE\n");
+		DBGPRINTF("INOTIFY event: watch IN_DELETE\n");
 	} else if(ev->mask & IN_DELETE_SELF) {
-		DBGPRINTF("watch IN_DELETE_SELF\n");
+		DBGPRINTF("INOTIFY event: watch IN_DELETE_SELF\n");
 	} else if(ev->mask & IN_MOVE_SELF) {
-		DBGPRINTF("watch IN_MOVE_SELF\n");
+		DBGPRINTF("INOTIFY event: watch IN_MOVE_SELF\n");
 	} else if(ev->mask & IN_MOVED_FROM) {
-		DBGPRINTF("watch IN_MOVED_FROM\n");
+		DBGPRINTF("INOTIFY event: watch IN_MOVED_FROM\n");
 	} else if(ev->mask & IN_MOVED_TO) {
-		DBGPRINTF("watch IN_MOVED_TO\n");
+		DBGPRINTF("INOTIFY event: watch IN_MOVED_TO\n");
 	} else if(ev->mask & IN_OPEN) {
-		DBGPRINTF("watch IN_OPEN\n");
+		DBGPRINTF("INOTIFY event: watch IN_OPEN\n");
 	} else if(ev->mask & IN_ISDIR) {
-		DBGPRINTF("watch IN_ISDIR\n");
+		DBGPRINTF("INOTIFY event: watch IN_ISDIR\n");
 	} else {
-		DBGPRINTF("unknown mask code %8.8x\n", ev->mask);
+		DBGPRINTF("INOTIFY event: unknown mask code %8.8x\n", ev->mask);
 	 }
 }
 
@@ -1780,6 +1828,9 @@ done:	return;
 }
 
 /* Monitor files in inotify mode */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align" /* TODO: how can we fix these warnings? */
+/* Problem with the warnings: they seem to stem back from the way the API is structured */
 static rsRetVal
 do_inotify()
 {
@@ -1819,6 +1870,7 @@ finalize_it:
 	close(ino_fd);
 	RETiRet;
 }
+#pragma GCC diagnostic pop
 
 #else /* #if HAVE_INOTIFY_INIT */
 static rsRetVal
@@ -1991,6 +2043,7 @@ resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unus
 	cs.iSeverity = 5;  /* notice, as of rfc 3164 */
 	cs.readMode = 0;
 	cs.maxLinesAtOnce = 10240;
+	cs.trimLineOverBytes = 0;
 
 	RETiRet;
 }
@@ -2037,6 +2090,8 @@ CODEmodInit_QueryRegCFSLineHdlr
 	  	NULL, &cs.readMode, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr((uchar *)"inputfilemaxlinesatonce", 0, eCmdHdlrSize,
 	  	NULL, &cs.maxLinesAtOnce, STD_LOADABLE_MODULE_ID));
+	CHKiRet(omsdRegCFSLineHdlr((uchar *)"inputfiletrimlineoverbytes", 0, eCmdHdlrSize,
+	  	NULL, &cs.trimLineOverBytes, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr((uchar *)"inputfilepersiststateinterval", 0, eCmdHdlrInt,
 	  	NULL, &cs.iPersistStateInterval, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr((uchar *)"inputfilebindruleset", 0, eCmdHdlrGetWord,

@@ -55,6 +55,7 @@ case $1 in
 		rm -rf test-spool test-logdir stat-file1
 		rm -f rsyslog.out.*.log work-presort rsyslog.pipe
 		rm -f rsyslog.input rsyslog.empty
+		rm -f testconf.conf
 		rm -f rsyslog.errorfile
 		rm -f core.* vgcore.*
 		# Note: rsyslog.action.*.include must NOT be deleted, as it
@@ -82,6 +83,7 @@ case $1 in
 		rm -rf test-spool test-logdir stat-file1
 		rm -f rsyslog.out.*.log rsyslog.random.data work-presort rsyslog.pipe
 		rm -f rsyslog.input rsyslog.conf.tlscert stat-file1 rsyslog.empty
+		rm -f testconf.conf
 		rm -f rsyslog.errorfile
 		rm -f HOSTNAME imfile-state:.-rsyslog.input
 		unset TCPFLOOD_EXTRA_OPTS
@@ -100,20 +102,39 @@ case $1 in
 		;;
    'startup')   # start rsyslogd with default params. $2 is the config file name to use
    		# returns only after successful startup, $3 is the instance (blank or 2!)
-		if [ ! -f $srcdir/testsuites/$2 ]; then
-		    echo "ERROR: config file '$srcdir/testsuites/$2' not found!"
+		if [ "x$2" == "x" ]; then
+		    CONF_FILE="testconf.conf"
+		else
+		    CONF_FILE="$srcdir/testsuites/$2"
+		fi
+		if [ ! -f $CONF_FILE ]; then
+		    echo "ERROR: config file '$CONF_FILE' not found!"
 		    exit 1
 		fi
-		$valgrind ../tools/rsyslogd -C -n -irsyslog$3.pid -M../runtime/.libs:../.libs -f$srcdir/testsuites/$2 &
+		$valgrind ../tools/rsyslogd -C -n -irsyslog$3.pid -M../runtime/.libs:../.libs -f$CONF_FILE &
 		. $srcdir/diag.sh wait-startup $3
 		;;
-   'startup-vg') # start rsyslogd with default params under valgrind control. $2 is the config file name to use
+   'startup-silent')   # start rsyslogd with default params. $2 is the config file name to use
    		# returns only after successful startup, $3 is the instance (blank or 2!)
 		if [ ! -f $srcdir/testsuites/$2 ]; then
 		    echo "ERROR: config file '$srcdir/testsuites/$2' not found!"
 		    exit 1
 		fi
-		valgrind --log-fd=1 --error-exitcode=10 --malloc-fill=ff --free-fill=fe --leak-check=full ../tools/rsyslogd -C -n -irsyslog$3.pid -M../runtime/.libs:../.libs -f$srcdir/testsuites/$2 &
+		$valgrind ../tools/rsyslogd -C -n -irsyslog$3.pid -M../runtime/.libs:../.libs -f$srcdir/testsuites/$2 2>/dev/null &
+		. $srcdir/diag.sh wait-startup $3
+		;;
+   'startup-vg') # start rsyslogd with default params under valgrind control. $2 is the config file name to use
+   		# returns only after successful startup, $3 is the instance (blank or 2!)
+		if [ "x$2" == "x" ]; then
+		    CONF_FILE="testconf.conf"
+		else
+		    CONF_FILE="$srcdir/testsuites/$2"
+		fi
+		if [ ! -f $CONF_FILE ]; then
+		    echo "ERROR: config file '$CONF_FILE' not found!"
+		    exit 1
+		fi
+		valgrind $RS_TESTBENCH_VALGRIND_EXTRA_OPTS --log-fd=1 --error-exitcode=10 --malloc-fill=ff --free-fill=fe --leak-check=full ../tools/rsyslogd -C -n -irsyslog$3.pid -M../runtime/.libs:../.libs -f$CONF_FILE &
 		. $srcdir/diag.sh wait-startup $3
 		echo startup-vg still running
 		;;
@@ -126,10 +147,14 @@ case $1 in
 		    echo "ERROR: config file '$srcdir/testsuites/$2' not found!"
 		    exit 1
 		fi
-		valgrind --log-fd=1 --error-exitcode=10 --malloc-fill=ff --free-fill=fe --leak-check=no ../tools/rsyslogd -C -n -irsyslog$3.pid -M../runtime/.libs:../.libs -f$srcdir/testsuites/$2 &
+		valgrind $RS_TESTBENCH_VALGRIND_EXTRA_OPTS --log-fd=1 --error-exitcode=10 --malloc-fill=ff --free-fill=fe --leak-check=no ../tools/rsyslogd -C -n -irsyslog$3.pid -M../runtime/.libs:../.libs -f$srcdir/testsuites/$2 &
 		. $srcdir/diag.sh wait-startup $3
 		echo startup-vg still running
 		;;
+	 'msleep')
+   	$srcdir/msleep $2
+		;;
+
    'wait-startup') # wait for rsyslogd startup ($2 is the instance)
 		i=0
 		while test ! -f rsyslog$2.pid; do
@@ -207,6 +232,14 @@ case $1 in
 			echo WaitMainQueueEmpty | ./diagtalker || . $srcdir/diag.sh error-exit  $?
 		fi
 		;;
+   'await-lookup-table-reload') # wait for all pending lookup table reloads to complete $2 is the instance.
+		if [ "$2" == "2" ]
+		then
+			echo AwaitLookupTableReload | ./diagtalker -p13501 || . $srcdir/diag.sh error-exit  $?
+		else
+			echo AwaitLookupTableReload | ./diagtalker || . $srcdir/diag.sh error-exit  $?
+		fi
+		;;
    'issue-HUP') # shut rsyslogd down when main queue is empty. $2 is the instance.
 		kill -HUP `cat rsyslog$2.pid`
 		./msleep 1000
@@ -237,6 +270,11 @@ case $1 in
    'injectmsg') # inject messages via our inject interface (imdiag)
 		echo injecting $3 messages
 		echo injectmsg $2 $3 $4 $5 | ./diagtalker || . $srcdir/diag.sh error-exit  $?
+		# TODO: some return state checking? (does it really make sense here?)
+		;;
+    'injectmsg-litteral') # inject litteral-payload  via our inject interface (imdiag)
+		echo injecting msg payload from: $2
+    cat $2 | sed -e 's/^/injectmsg litteral /g' | ./diagtalker || . $srcdir/diag.sh error-exit  $?
 		# TODO: some return state checking? (does it really make sense here?)
 		;;
    'check-mainq-spool') # check if mainqueue spool files exist, if not abort (we just check .qi).
@@ -277,15 +315,63 @@ case $1 in
    'content-check') 
 		cat rsyslog.out.log | grep -qF "$2"
 		if [ "$?" -ne "0" ]; then
-		    echo content-check failed, content is
+		    echo content-check failed to find "'$2'", content is
 		    cat rsyslog.out.log
 		    . $srcdir/diag.sh error-exit 1
 		fi
+		;;
+   'content-check-with-count') 
+		count=$(cat rsyslog.out.log | grep -qF "$2" | wc -l)
+		if [ "x$count" == "x$3" ]; then
+		    echo content-check failed, expected $2 to occure $3 times, but found it $count times
+		    . $srcdir/diag.sh error-exit 1
+		fi
+		;;
+	 'wait-for-stats-flush')
+		echo "will wait for stats push"
+		while [[ ! -f $2 ]]; do
+				echo waiting for stats file "'$2'" to be created
+				./msleep 100
+		done
+		prev_count=$(cat $2 | grep 'BEGIN$' | wc -l)
+		new_count=$prev_count
+		while [[ "x$prev_count" == "x$new_count" ]]; do
+				new_count=$(cat $2 | grep 'BEGIN$' | wc -l) # busy spin, because it allows as close timing-coordination in actual test run as possible
+		done
+		echo "stats push registered"
+		;;
+	 'wait-for-dyn-stats-reset')
+		echo "will wait for dyn-stats-reset"
+		while [[ ! -f $2 ]]; do
+				echo waiting for stats file "'$2'" to be created
+				./msleep 100
+		done
+		prev_purged=$(cat $2 | grep -F 'origin=dynstats' | grep -F "${3}.purge_triggered=" | sed -e 's/.\+.purge_triggered=//g' | awk '{s+=$1} END {print s}')
+		new_purged=$prev_purged
+		while [[ "x$prev_purged" == "x$new_purged" ]]; do
+				new_purged=$(cat $2 | grep -F 'origin=dynstats' | grep -F "${3}.purge_triggered=" | sed -e 's/.\+\.purge_triggered=//g' | awk '{s+=$1} END {print s}') # busy spin, because it allows as close timing-coordination in actual test run as possible
+				./msleep 10
+		done
+		echo "dyn-stats reset for bucket ${3} registered"
 		;;
    'custom-content-check') 
 		cat $3 | grep -qF "$2"
 		if [ "$?" -ne "0" ]; then
 		    echo content-check failed to find "'$2'" inside "'$3'"
+		    . $srcdir/diag.sh error-exit 1
+		fi
+		;;
+   'first-column-sum-check') 
+		sum=$(cat $4 | grep $3 | sed -e $2 | awk '{s+=$1} END {print s}')
+		if [ "x${sum}" != "x$5" ]; then
+		    echo sum of first column with edit-expr "'$2'" run over lines from file "'$4'" matched by "'$3'" equals "'$sum'" which is not equal to expected value of "'$5'"
+		    . $srcdir/diag.sh error-exit 1
+		fi
+		;;
+   'assert-first-column-sum-greater-than') 
+		sum=$(cat $4 | grep $3 | sed -e $2 | awk '{s+=$1} END {print s}')
+		if [ ! $sum -gt $5 ]; then
+		    echo sum of first column with edit-expr "'$2'" run over lines from file "'$4'" matched by "'$3'" equals "'$sum'" which is smaller than expected lower-limit of "'$5'"
 		    . $srcdir/diag.sh error-exit 1
 		fi
 		;;
@@ -299,6 +385,14 @@ case $1 in
    'assert-content-missing') 
 		cat rsyslog.out.log | grep -qF "$2"
 		if [ "$?" -eq "0" ]; then
+				echo content-missing assertion failed, some line matched pattern "'$2'"
+		    . $srcdir/diag.sh error-exit 1
+		fi
+		;;
+   'custom-assert-content-missing') 
+		cat $3 | grep -qF "$2"
+		if [ "$?" -eq "0" ]; then
+				echo content-missing assertion failed, some line in "'$3'" matched pattern "'$2'"
 		    . $srcdir/diag.sh error-exit 1
 		fi
 		;;
@@ -334,6 +428,12 @@ case $1 in
 		./msleep 100
 		. $srcdir/diag.sh shutdown-when-empty # shut down rsyslogd when done processing messages
 		. $srcdir/diag.sh wait-shutdown	# we need to wait until rsyslogd is finished!
+		;;
+   'generate-conf')   # start a standard test rsyslog.conf
+		echo "\$IncludeConfig diag-common.conf" > testconf.conf
+		;;
+   'add-conf')   # start a standard test rsyslog.conf
+		echo "$2" >> testconf.conf
 		;;
    'error-exit') # this is called if we had an error and need to abort. Here, we
                 # try to gather as much information as possible. That's most important

@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([rsyslog],[8.16.0],[rsyslog@lists.adiscon.com])
+AC_INIT([rsyslog],[8.17.0],[rsyslog@lists.adiscon.com])
 AM_INIT_AUTOMAKE([subdir-objects])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -26,11 +26,7 @@ PKG_PROG_PKG_CONFIG
 
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.1.9)
-PKG_CHECK_MODULES([JSON_C], [libfastjson],, [
-	PKG_CHECK_MODULES([JSON_C], [json],, [
-		PKG_CHECK_MODULES([JSON_C], [json-c],,)
-	])
-])
+PKG_CHECK_MODULES([JSON_C], [libfastjson],,)
 
 save_CFLAGS="$CFLAGS"
 save_LIBS="$LIBS"
@@ -133,8 +129,6 @@ AC_CHECK_MEMBERS([struct sockaddr.sa_len],,,[$sa_includes])
 AC_FUNC_CHOWN
 AC_FUNC_FORK
 AC_PROG_GCC_TRADITIONAL
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
 AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
 AC_FUNC_STAT
@@ -160,6 +154,7 @@ AC_CHECK_DECL([GLOB_NOMAGIC], [AC_DEFINE(HAVE_GLOB_NOMAGIC, [1], [set define])],
 AC_MSG_CHECKING(for MAXHOSTNAMELEN)
 AC_TRY_COMPILE([
 	#include <sys/param.h>
+	#include <netdb.h>
 	], [
 	return MAXHOSTNAMELEN;
 	]
@@ -295,6 +290,22 @@ AC_CHECK_HEADERS(
     ],
     [AC_MSG_FAILURE([pthread is missing])]
 )
+
+AC_CHECK_LIB(
+  [pthread],
+	[pthread_rwlockattr_setkind_np],
+	[AC_DEFINE(
+	   [HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP],
+		 [1],
+		 [Set-kind available for rwlock attr.])])
+
+AC_CHECK_LIB(
+  [pthread],
+	[pthread_setname_np],
+	[AC_DEFINE(
+	   [HAVE_PTHREAD_SETNAME_NP],
+		 [1],
+		 [Can set thread-name.])])
 
 AC_CHECK_FUNCS(
     [pthread_setschedparam],
@@ -1637,7 +1648,29 @@ AC_ARG_ENABLE(omhiredis,
 )
 #
 if test "x$enable_omhiredis" = "xyes"; then
-	PKG_CHECK_MODULES(HIREDIS, hiredis >= 0.10.1)
+    PKG_CHECK_MODULES(HIREDIS, hiredis >= 0.10.1, [],
+        [AC_SEARCH_LIBS(redisConnectWithTimeout, hiredis,
+            [AC_COMPILE_IFELSE(
+                [AC_LANG_PROGRAM(
+                    [[ #include <hiredis/hiredis.h> ]],
+                    [[ #define major 0
+                       #define minor 10
+                       #define patch 1
+                       #if (( HIREDIS_MAJOR > major ) || \
+                         (( HIREDIS_MAJOR == major ) && ( HIREDIS_MINOR > minor )) || \
+                         (( HIREDIS_MAJOR == major ) && ( HIREDIS_MINOR == minor ) && ( HIREDIS_PATCH >= patch ))) \
+                       /* OK */
+                       #else
+                       # error Hiredis version must be >= major.minor.path
+                       #endif
+                    ]]
+                )],
+                [],
+                [AC_MSG_ERROR([hiredis version must be >= 0.10.1])]
+            )],
+            [AC_MSG_ERROR([hiredis not found])]
+        )]
+    )
 fi
 AM_CONDITIONAL(ENABLE_OMHIREDIS, test x$enable_omhiredis = xyes)
 
@@ -1665,6 +1698,27 @@ fi
 AM_CONDITIONAL(ENABLE_OMHTTPFS, test x$enable_omhttpfs = xyes)
 
 # END HTTPFS SUPPORT
+
+# AMQP 1.0 PROTOCOL SUPPORT
+# uses the Proton protocol library
+
+AC_ARG_ENABLE(omamqp1,
+        [AS_HELP_STRING([--enable-omamqp1],[Compiles omamqp1 output module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_omamqp1="yes" ;;
+          no) enable_omamqp1="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-omamqp1) ;;
+         esac],
+        [enable_omamqp1=no]
+)
+if test "x$enable_omamqp1" = "xyes"; then
+        PKG_CHECK_MODULES(PROTON, libqpid-proton >= 0.9)
+        AC_SUBST(PROTON_CFLAGS)
+        AC_SUBST(PROTON_LIBS)
+fi
+AM_CONDITIONAL(ENABLE_OMAMQP1, test x$enable_omamqp1 = xyes)
+
+# END AMQP 1.0 PROTOCOL SUPPORT
 
 # man pages
 AC_CHECKING([if required man pages already exist])
@@ -1793,6 +1847,7 @@ AC_CONFIG_FILES([Makefile \
 		contrib/omhttpfs/Makefile \
 		contrib/pmkeyvalue/Makefile \
 		contrib/mmdtparse/Makefile \
+		contrib/omamqp1/Makefile \
 		tests/Makefile])
 AC_OUTPUT
 
@@ -1842,6 +1897,7 @@ echo "    omzmq3 module will be compiled:           $enable_omzmq3"
 echo "    omczmq module will be compiled:           $enable_omczmq"
 echo "    omrabbitmq module will be compiled:       $enable_omrabbitmq"
 echo "    omhttpfs module will be compiled:         $enable_omhttpfs"
+echo "    omamqp1 module will be compiled:          $enable_omamqp1"
 echo
 echo "---{ parser modules }---"
 echo "    pmlastmsg module will be compiled:        $enable_pmlastmsg"

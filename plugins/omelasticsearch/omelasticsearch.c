@@ -319,6 +319,8 @@ getIndexTypeAndParent(instanceData *pData, uchar **tpls,
 		      uchar **srchIndex, uchar **srchType, uchar **parent,
 			  uchar **bulkId)
 {
+	if(tpls == NULL)
+		return;
 	if(pData->dynSrchIdx) {
 		*srchIndex = tpls[1];
 		if(pData->dynSrchType) {
@@ -385,7 +387,7 @@ static rsRetVal
 setCurlURL(wrkrInstanceData_t *pWrkrData, instanceData *pData, uchar **tpls)
 {
 	char authBuf[1024];
-	uchar *searchIndex;
+	uchar *searchIndex = 0;
 	uchar *searchType;
 	uchar *parent;
 	uchar *bulkId;
@@ -394,10 +396,11 @@ setCurlURL(wrkrInstanceData_t *pWrkrData, instanceData *pData, uchar **tpls)
 	int r;
 	DEFiRet;
 	char separator;
+	const int bulkmode = pData->bulkmode;
 
 	setBaseURL(pData, &url);
 
-	if(pData->bulkmode) {
+	if(bulkmode) {
 		r = es_addBuf(&url, "_bulk", sizeof("_bulk")-1);
 		parent = NULL;
 	} else {
@@ -459,9 +462,9 @@ buildBatch(wrkrInstanceData_t *pWrkrData, uchar *message, uchar **tpls)
 {
 	int length = strlen((char *)message);
 	int r;
-	uchar *searchIndex;
+	uchar *searchIndex = 0;
 	uchar *searchType;
-	uchar *parent;
+	uchar *parent = NULL;
 	uchar *bulkId = NULL;
 	DEFiRet;
 #	define META_STRT "{\"index\":{\"_index\": \""
@@ -534,7 +537,7 @@ getDataErrorDefault(wrkrInstanceData_t *pWrkrData,cJSON **pReplyRoot,uchar *reqm
  * Sections are marked by { and }
  */
 static inline rsRetVal
-getSection(const char* bulkRequest,char **bulkRequestNextSectionStart )
+getSection(const char* bulkRequest, const char **bulkRequestNextSectionStart )
 {
 		DEFiRet;
 		char* index =0;
@@ -557,24 +560,24 @@ getSection(const char* bulkRequest,char **bulkRequestNextSectionStart )
  * and sets lastLocation pointer to the location till which bulkrequest has been parsed.(used as input to make function thread safe.)
  */
 static inline rsRetVal
-getSingleRequest(const char* bulkRequest, char** singleRequest ,char **lastLocation)
+getSingleRequest(const char* bulkRequest, char** singleRequest, const char **lastLocation)
 {
 	DEFiRet;
-	char *req = bulkRequest;
-	char *start = bulkRequest;
+	const char *req = bulkRequest;
+	const char *start = bulkRequest;
 	if (getSection(req,&req)!=RS_RET_OK)
 		ABORT_FINALIZE(RS_RET_ERR);
 
 	if (getSection(req,&req)!=RS_RET_OK)
 			ABORT_FINALIZE(RS_RET_ERR);
 
-    *singleRequest = (char*) calloc (req - start+ 1 + 1,1);/* (req - start+ 1 == length of data + 1 for terminal char)*/
-    if (*singleRequest==NULL) ABORT_FINALIZE(RS_RET_ERR);
-    memcpy(*singleRequest,start,req - start);
-    *lastLocation=req;
+	CHKmalloc(*singleRequest = (char*) calloc (req - start+ 1 + 1,1));
+	/* (req - start+ 1 == length of data + 1 for terminal char)*/
+	memcpy(*singleRequest,start,req - start);
+	*lastLocation=req;
 
-	finalize_it:
-			RETiRet;
+finalize_it:
+	RETiRet;
 }
 
 /*
@@ -620,7 +623,7 @@ parseRequestAndResponseForContext(wrkrInstanceData_t *pWrkrData,cJSON **pReplyRo
 	numitems = cJSON_GetArraySize(items);
 
 	DBGPRINTF("omelasticsearch: Entire request %s\n",reqmsg);
-	char *lastReqRead= (char*)reqmsg;
+	const char *lastReqRead= (char*)reqmsg;
 
 	DBGPRINTF("omelasticsearch: %d items in reply\n", numitems);
 	for(i = 0 ; i < numitems ; ++i) {
@@ -666,7 +669,7 @@ parseRequestAndResponseForContext(wrkrInstanceData_t *pWrkrData,cJSON **pReplyRo
 
 			response = cJSON_PrintUnformatted(create);
 
-			if(*response==NULL)
+			if(response==NULL)
 			{
 				free(request);/*as its has been assigned.*/
 				DBGPRINTF("omelasticsearch: Error getting cJSON_PrintUnformatted. Cannot continue\n");
@@ -731,8 +734,11 @@ getDataErrorOnly(context *ctx,int itemStatus,char *request,char *response)
  * Dumps all requests of bulk insert interleaved with request and response
  */
 
-static inline rsRetVal
-getDataInterleaved(context *ctx,int itemStatus,char *request,char *response)
+static rsRetVal
+getDataInterleaved(context *ctx,
+	int __attribute__((unused)) itemStatus,
+	char *request,
+	char *response)
 {
 	DEFiRet;
 	cJSON *interleaved =0;

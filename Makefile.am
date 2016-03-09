@@ -248,6 +248,10 @@ if ENABLE_OMHTTPFS
 SUBDIRS += contrib/omhttpfs
 endif
 
+# omamqp1
+if ENABLE_OMAMQP1
+SUBDIRS += contrib/omamqp1
+endif
 
 if ENABLE_PMKEYVALUE
 SUBDIRS += contrib/pmkeyvalue

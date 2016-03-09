@@ -12,6 +12,8 @@ TESTS = $(TESTRUNS)
 TESTS +=  \
 	stop-localvar.sh \
 	stop-msgvar.sh \
+	glbl-unloadmodules.sh \
+	glbl-invld-param.sh \
 	msgvar-concurrency.sh \
 	localvar-concurrency.sh \
 	exec_tpl-concurrency.sh \
@@ -28,6 +30,14 @@ TESTS +=  \
 	fac_invld3.sh \
 	fac_invld4_rfc5424.sh \
 	now_family_utc.sh \
+	now-utc.sh \
+	now-utc-ymd.sh \
+	now-utc-casecmp.sh \
+	timegenerated-ymd.sh \
+	timegenerated-uxtimestamp.sh \
+	timegenerated-uxtimestamp-invld.sh \
+	timegenerated-dateordinal.sh \
+	timegenerated-dateordinal-invld.sh \
 	rawmsg-after-pri.sh \
 	rfc5424parser.sh \
 	tcp_forwarding_tpl.sh \
@@ -73,6 +83,7 @@ TESTS +=  \
 	abort-uncleancfg-goodcfg-check.sh \
 	abort-uncleancfg-badcfg-check.sh \
 	abort-uncleancfg-badcfg-check_1.sh \
+	variable_leading_underscore.sh \
 	gzipwr_large.sh \
 	gzipwr_large_dynfile.sh \
 	dynfile_invld_async.sh \
@@ -94,10 +105,15 @@ TESTS +=  \
 	dircreate_dflt.sh \
 	dircreate_off.sh \
 	imuxsock_logger.sh \
+	imuxsock_logger_ruleset.sh \
+	imuxsock_logger_ruleset_ratelimit.sh \
 	imuxsock_logger_err.sh \
 	imuxsock_logger_parserchain.sh \
 	imuxsock_traillf.sh \
 	imuxsock_ccmiddle.sh \
+	imuxsock_logger_syssock.sh \
+	imuxsock_traillf_syssock.sh \
+	imuxsock_ccmiddle_syssock.sh \
 	imuxsock_logger_root.sh \
 	imuxsock_traillf_root.sh \
 	imuxsock_ccmiddle_root.sh \
@@ -147,8 +163,14 @@ TESTS +=  \
 	incltest_dir_empty_wildcard.sh \
 	linkedlistqueue.sh \
 	lookup_table.sh \
-	key_dereference_on_uninitialized_variable_space.sh
-
+	lookup_table_no_hup_reload.sh \
+	key_dereference_on_uninitialized_variable_space.sh \
+	array_lookup_table.sh \
+	sparse_array_lookup_table.sh \
+	lookup_table_bad_configs.sh \
+	lookup_table_rscript_reload.sh \
+	lookup_table_rscript_reload_without_stub.sh \
+	multiple_lookup_tables.sh
 
 if HAVE_VALGRIND
 TESTS +=  \
@@ -160,9 +182,36 @@ TESTS +=  \
 	failover-no-rptd-vg.sh \
 	udp-msgreduc-vg.sh \
 	udp-msgreduc-orgmsg-vg.sh \
-	tcp-msgreduc-vg.sh
+	tcp-msgreduc-vg.sh \
+	rscript_field-vg.sh \
+	unused_lookup_table.sh \
+	lookup_table-vg.sh \
+	lookup_table_no_hup_reload-vg.sh \
+	array_lookup_table-vg.sh \
+	array_lookup_table_misuse-vg.sh \
+	sparse_array_lookup_table-vg.sh \
+	lookup_table_bad_configs-vg.sh \
+	lookup_table_rscript_reload-vg.sh \
+	lookup_table_rscript_reload_without_stub-vg.sh \
+	multiple_lookup_tables-vg.sh
 endif # HAVE_VALGRIND
 
+if ENABLE_USERTOOLS
+if ENABLE_GT_KSI
+TESTS +=  \
+	ksi-verify-short.sh \
+	ksi-verify-long.sh \
+	ksi-extract-verify-short.sh \
+	ksi-extract-verify-long.sh 
+if HAVE_VALGRIND
+TESTS +=  \
+	ksi-verify-short-vg.sh \
+	ksi-verify-long-vg.sh \
+	ksi-extract-verify-short-vg.sh \
+	ksi-extract-verify-long-vg.sh 
+endif
+endif
+endif
 
 if ENABLE_MYSQL_TESTS
 TESTS +=  \
@@ -188,6 +237,21 @@ endif
 endif
 endif
 
+if ENABLE_IMPSTATS
+TESTS +=  \
+	dynstats.sh \
+	dynstats_overflow.sh \
+	dynstats_reset.sh \
+	dynstats_ctr_reset.sh \
+	dynstats_nometric.sh
+if HAVE_VALGRIND
+TESTS +=  \
+	dynstats-vg.sh \
+	dynstats_reset-vg.sh \
+	dynstats_overflow-vg.sh
+endif
+endif
+
 if ENABLE_IMPTCP
 # note that some tests simply USE imptcp, but they also
 # need to be disabled if we do not have this module
@@ -198,6 +262,8 @@ TESTS +=  \
 	imptcp_conndrop.sh \
 	imptcp_no_octet_counted.sh \
 	imptcp_spframingfix.sh \
+	imptcp_nonProcessingPoller.sh \
+	imptcp_veryLargeOctateCountedMessages.sh \
 	rscript_random.sh \
 	rscript_replace.sh
 if HAVE_VALGRIND
@@ -234,6 +300,8 @@ endif
 endif
 
 if ENABLE_MMNORMALIZE
+TESTS += msgvar-concurrency-array.sh \
+	msgvar-concurrency-array-event.tags.sh
 if ENABLE_IMPTCP
 TESTS +=  \
 	mmnormalize_regex_defaulted.sh \
@@ -265,20 +333,23 @@ TESTS +=  \
 	stop_when_array_has_element.sh \
 	json_null_array.sh \
 	json_null.sh \
-	json_var_cmpr.sh
+	json_var_cmpr.sh \
+	json_var_case.sh
 endif
 
 if ENABLE_GNUTLS
 # TODO: re-enable in newer version
-#TESTS +=  \
+TESTS +=  \
+	imtcp_conndrop_tls.sh
 #sndrcv_tls_anon.sh \
 #sndrcv_tls_anon_rebind.sh \
-imtcp-tls-basic.sh
+#	imtcp-tls-basic.sh
 if HAVE_VALGRIND
 TESTS += \
 	imtcp-tls-basic-vg.sh \
 	imtcp_conndrop_tls-vg.sh
 if !ENABLE_DISTCHECK_WORKAROUND
+TESTS += \
 	manytcp-too-few-tls-vg.sh
 endif
 endif
@@ -350,6 +421,8 @@ DISTCLEANFILES=rsyslog.pid
 test_files = testbench.h runtime-dummy.c
 
 EXTRA_DIST= \
+	glbl-unloadmodules.sh \
+	glbl-invld-param.sh \
 	1.rstest 2.rstest 3.rstest err1.rstest \
 	validation-run.sh \
 	tls-certs/ca-key.pem \
@@ -459,6 +532,7 @@ EXTRA_DIST= \
 	rscript_contains.sh \
 	testsuites/rscript_contains.conf \
 	rscript_field.sh \
+	rscript_field-vg.sh \
 	testsuites/rscript_field.conf \
 	rscript_stop.sh \
 	testsuites/rscript_stop.conf \
@@ -499,10 +573,18 @@ EXTRA_DIST= \
 	testsuites/stop-msgvar.conf \
 	msgvar-concurrency.sh \
 	testsuites/msgvar-concurrency.conf \
+	msgvar-concurrency-array.sh \
+	testsuites/msgvar-concurrency-array.conf \
+	testsuites/msgvar-concurrency-array.rulebase \
+	msgvar-concurrency-array-event.tags.sh \
+	testsuites/msgvar-concurrency-array-event.tags.conf \
+	testsuites/msgvar-concurrency-array-event.tags.rulebase \
 	localvar-concurrency.sh \
 	testsuites/localvar-concurrency.conf \
 	exec_tpl-concurrency.sh \
 	testsuites/exec_tpl-concurrency.conf \
+	prop-all-json-concurrency.sh \
+	testsuites/prop-all-json-concurrency.conf \
 	global_vars.sh \
 	testsuites/global_vars.conf \
 	rfc5424parser.sh \
@@ -533,6 +615,15 @@ EXTRA_DIST= \
 	testsuites/fac_invld4_rfc5424.conf \
 	now_family_utc.sh \
 	testsuites/now_family_utc.conf \
+	now-utc-ymd.sh \
+	now-utc-casecmp.sh \
+	now-utc.sh \
+	testsuites/now-utc.conf \
+	timegenerated-ymd.sh \
+	timegenerated-uxtimestamp.sh \
+	timegenerated-uxtimestamp-invld.sh \
+	timegenerated-dateordinal.sh \
+	timegenerated-dateordinal-invld.sh \
 	rawmsg-after-pri.sh \
 	testsuites/rawmsg-after-pri.conf \
 	rs_optimizer_pri.sh \
@@ -744,6 +835,8 @@ EXTRA_DIST= \
 	testsuites/abort-uncleancfg-badcfg.conf \
 	abort-uncleancfg-badcfg-check_1.sh \
 	testsuites/abort-uncleancfg-badcfg_1.conf \
+	variable_leading_underscore.sh \
+	testsuites/variable_leading_underscore.conf \
 	gzipwr_large.sh \
 	testsuites/gzipwr_large.conf \
 	gzipwr_large_dynfile.sh \
@@ -820,19 +913,29 @@ EXTRA_DIST= \
 	testsuites/imuxsock_logger_parserchain.conf \
 	imuxsock_logger.sh \
 	testsuites/imuxsock_logger.conf \
+	imuxsock_logger_ruleset.sh \
+	testsuites/imuxsock_logger_ruleset.conf \
+	imuxsock_logger_ruleset_ratelimit.sh \
+	testsuites/imuxsock_logger_ruleset_ratelimit.conf \
 	imuxsock_logger_err.sh \
 	imuxsock_logger_root.sh \
+	imuxsock_logger_syssock.sh \
 	testsuites/imuxsock_logger_root.conf \
+	testsuites/imuxsock_logger_syssock.conf \
 	resultdata/imuxsock_logger.log \
 	imuxsock_traillf.sh \
 	testsuites/imuxsock_traillf.conf \
 	imuxsock_traillf_root.sh \
+	imuxsock_traillf_syssock.sh \
 	testsuites/imuxsock_traillf_root.conf \
+	testsuites/imuxsock_traillf_syssock.conf \
 	resultdata/imuxsock_traillf.log \
 	imuxsock_ccmiddle.sh \
 	testsuites/imuxsock_ccmiddle.conf \
 	imuxsock_ccmiddle_root.sh \
+	imuxsock_ccmiddle_syssock.sh \
 	testsuites/imuxsock_ccmiddle_root.conf \
+	testsuites/imuxsock_ccmiddle_syssock.conf \
 	resultdata/imuxsock_ccmiddle.log \
 	imuxsock_hostname.sh \
 	testsuites/imuxsock_hostname.conf \
@@ -861,6 +964,27 @@ EXTRA_DIST= \
 	mmpstrucdata-invalid-vg.sh \
 	testsuites/mmpstrucdata-invalid.conf \
 	libdbi-basic-vg.sh \
+	dynstats_ctr_reset.sh \
+	dynstats_nometric.sh \
+	dynstats_overflow.sh \
+	dynstats_overflow-vg.sh \
+	dynstats_reset.sh \
+	dynstats_reset-vg.sh \
+	dynstats.sh \
+	dynstats-vg.sh \
+	testsuites/dynstats.conf \
+	testsuites/dynstats_ctr_reset.conf \
+	testsuites/dynstats_empty_input \
+	testsuites/dynstats_input \
+	testsuites/dynstats_input_1 \
+	testsuites/dynstats_input_2 \
+	testsuites/dynstats_input_3 \
+	testsuites/dynstats_input_more_0 \
+	testsuites/dynstats_input_more_1 \
+	testsuites/dynstats_input_more_2 \
+	testsuites/dynstats_nometric.conf \
+	testsuites/dynstats_overflow.conf \
+	testsuites/dynstats_reset.conf \
 	mmnormalize_variable.sh \
 	mmnormalize_tokenized.sh \
 	testsuites/mmnormalize_variable.conf \
@@ -914,12 +1038,77 @@ EXTRA_DIST= \
 	rscript_re_match.sh \
 	testsuites/rscript_re_match.conf \
 	lookup_table.sh \
+	lookup_table_no_hup_reload.sh \
+	lookup_table_no_hup_reload-vg.sh \
+	lookup_table_rscript_reload.sh \
+	lookup_table_rscript_reload_without_stub.sh \
+	lookup_table_rscript_reload-vg.sh \
+	lookup_table_rscript_reload_without_stub-vg.sh \
 	testsuites/lookup_table.conf \
+	testsuites/lookup_table_no_hup_reload.conf \
+	testsuites/lookup_table_reload_stub.conf \
+	testsuites/lookup_table_reload.conf \
 	testsuites/xlate.lkp_tbl \
 	testsuites/xlate_more.lkp_tbl \
+	unused_lookup_table.sh \
+	lookup_table-vg.sh \
+	testsuites/unused_lookup_table.conf \
+	array_lookup_table.sh \
+	array_lookup_table-vg.sh \
+	array_lookup_table_misuse-vg.sh \
+	multiple_lookup_tables.sh \
+	multiple_lookup_tables-vg.sh \
+	testsuites/array_lookup_table.conf \
+	testsuites/xlate_array.lkp_tbl \
+	testsuites/xlate_array_more.lkp_tbl \
+	testsuites/xlate_array_misuse.lkp_tbl \
+	testsuites/xlate_array_more_misuse.lkp_tbl \
+	sparse_array_lookup_table.sh \
+	sparse_array_lookup_table-vg.sh \
+	testsuites/xlate_sparse_array.lkp_tbl \
+	testsuites/xlate_sparse_array_more.lkp_tbl \
+	lookup_table_bad_configs.sh \
+	lookup_table_bad_configs-vg.sh \
+	testsuites/lookup_table_all.conf \
+	testsuites/xlate_array_empty_table.lkp_tbl \
+	testsuites/xlate_array_no_index.lkp_tbl \
+	testsuites/xlate_array_no_table.lkp_tbl \
+	testsuites/xlate_array_no_value.lkp_tbl \
+	testsuites/xlate_empty_file.lkp_tbl \
+	testsuites/xlate_incorrect_type.lkp_tbl \
+	testsuites/xlate_incorrect_version.lkp_tbl \
+	testsuites/xlate_sparseArray_empty_table.lkp_tbl \
+	testsuites/xlate_sparseArray_no_index.lkp_tbl \
+	testsuites/xlate_sparseArray_no_table.lkp_tbl \
+	testsuites/xlate_sparseArray_no_value.lkp_tbl \
+	testsuites/xlate_string_empty_table.lkp_tbl \
+	testsuites/xlate_string_no_index.lkp_tbl \
+	testsuites/xlate_string_no_table.lkp_tbl \
+	testsuites/xlate_string_no_value.lkp_tbl \
+	testsuites/xlate_invalid_json.lkp_tbl \
+	testsuites/xlate_array_more_with_duplicates_and_nomatch.lkp_tbl \
+	testsuites/xlate_more_with_duplicates_and_nomatch.lkp_tbl \
+	testsuites/xlate_sparse_array_more_with_duplicates_and_nomatch.lkp_tbl \
+	testsuites/multiple_lookup_tables.conf \
 	json_var_cmpr.sh \
 	testsuites/json_var_cmpr.conf \
-	cfg.sh
+	imptcp_nonProcessingPoller.sh \
+	imptcp_veryLargeOctateCountedMessages.sh \
+	testsuites/imptcp_nonProcessingPoller.conf \
+	travis/trusty.supp \
+	json_var_case.sh \
+	testsuites/json_var_case.conf \
+	cfg.sh \
+	testsuites/ksi-sample.log \
+	testsuites/ksi-sample.log.ksisig \
+	ksi-verify-short.sh \
+	ksi-verify-long.sh \
+	ksi-extract-verify-short.sh \
+	ksi-extract-verify-long.sh 
+	ksi-verify-short-vg.sh \
+	ksi-verify-long-vg.sh \
+	ksi-extract-verify-short-vg.sh \
+	ksi-extract-verify-long-vg.sh 
 
 # TODO: re-enable
 #sndrcv_tls_anon_rebind.sh \

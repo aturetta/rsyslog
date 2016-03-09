@@ -167,6 +167,7 @@ void cnfSetDefaults(rsconf_t *pThis)
 BEGINobjConstruct(rsconf) /* be sure to specify the object type also in END macro! */
 	cnfSetDefaults(pThis);
 	lookupInitCnf(&pThis->lu_tabs);
+	CHKiRet(dynstats_initCnf(&pThis->dynstats_buckets));
 	CHKiRet(llInit(&pThis->rulesets.llRulesets, rulesetDestructForLinkedList,
 			rulesetKeyDestruct, strcasecmp));
 finalize_it:
@@ -208,8 +209,10 @@ BEGINobjDestruct(rsconf) /* be sure to specify the object type also in END and C
 CODESTARTobjDestruct(rsconf)
 	freeCnf(pThis);
 	tplDeleteAll(pThis);
+	dynstats_destroyAllBuckets();
 	free(pThis->globals.mainQ.pszMainMsgQFName);
 	free(pThis->globals.pszConfDAGFile);
+	lookupDestroyCnf();
 	llDestroy(&(pThis->rulesets.llRulesets));
 ENDobjDestruct(rsconf)
 
@@ -424,7 +427,10 @@ void cnfDoObj(struct cnfobj *o)
 		inputProcessCnf(o);
 		break;
 	case CNFOBJ_LOOKUP_TABLE:
-		lookupProcessCnf(o);
+		lookupTableDefProcessCnf(o);
+		break;
+	case CNFOBJ_DYN_STATS:
+		dynstats_processCnf(o);
 		break;
 	case CNFOBJ_PARSER:
 		parserProcessCnf(o);
@@ -1003,7 +1009,7 @@ regBuildInModule(rsRetVal (*modInit)(), uchar *name, void *pModHdlr)
 	DEFiRet;
 	CHKiRet(module.doModInit(modInit, name, pModHdlr, &pMod));
 	readyModForCnf(pMod, &pNew, &pLast);
-	addModToCnfList(pNew, pLast);
+	addModToCnfList(&pNew, pLast);
 finalize_it:
 	RETiRet;
 }

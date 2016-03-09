@@ -53,6 +53,7 @@
 #include "datetime.h"
 #include "ratelimit.h"
 #include "queue.h"
+#include "lookup.h"
 #include "net.h" /* for permittedPeers, may be removed when this is removed */
 
 MODULE_TYPE_INPUT
@@ -195,20 +196,15 @@ finalize_it:
 	RETiRet;
 }
 
-
-/* actually submit a message to the rsyslog core
+/* submit a generated numeric-suffix message to the rsyslog core
  */
 static rsRetVal
-doInjectMsg(int iNum, ratelimit_t *ratelimiter)
+doInjectMsg(uchar *szMsg, ratelimit_t *ratelimiter)
 {
-	uchar szMsg[1024];
 	msg_t *pMsg;
 	struct syslogTime stTime;
 	time_t ttGenTime;
 	DEFiRet;
-
-	snprintf((char*)szMsg, sizeof(szMsg),
-		 "<167>Mar  1 01:00:00 172.20.245.8 tag msgnum:%8.8d:", iNum);
 
 	datetime.getCurrTime(&stTime, &ttGenTime, TIME_IN_LOCALTIME);
 	/* we now create our own message object and submit it to the queue */
@@ -225,6 +221,19 @@ finalize_it:
 	RETiRet;
 }
 
+/* submit a generated numeric-suffix message to the rsyslog core
+ */
+static rsRetVal
+doInjectNumericSuffixMsg(int iNum, ratelimit_t *ratelimiter)
+{
+	uchar szMsg[1024];
+	DEFiRet;
+	snprintf((char*)szMsg, sizeof(szMsg)/sizeof(uchar),
+             "<167>Mar  1 01:00:00 172.20.245.8 tag msgnum:%8.8d:", iNum);
+	CHKiRet(doInjectMsg(szMsg, ratelimiter));
+finalize_it:
+	RETiRet;
+}
 
 /* This function injects messages. Command format:
  * injectmsg <fromnbr> <number-of-messages>
@@ -234,29 +243,38 @@ static rsRetVal
 injectMsg(uchar *pszCmd, tcps_sess_t *pSess)
 {
 	uchar wordBuf[1024];
-	int iFrom;
-	int nMsgs;
+	int iFrom, nMsgs;
+	uchar *litteralMsg;
 	int i;
 	ratelimit_t *ratelimit = NULL;
 	DEFiRet;
 
+	litteralMsg = NULL;
+
+	CHKiRet(ratelimitNew(&ratelimit, "imdiag", "injectmsg"));
 	/* we do not check errors here! */
 	getFirstWord(&pszCmd, wordBuf, sizeof(wordBuf), TO_LOWERCASE);
-	iFrom = atoi((char*)wordBuf);
-	getFirstWord(&pszCmd, wordBuf, sizeof(wordBuf), TO_LOWERCASE);
-	nMsgs = atoi((char*)wordBuf);
-	CHKiRet(ratelimitNew(&ratelimit, "imdiag", "injectmsg"));
-
-	for(i = 0 ; i < nMsgs ; ++i) {
-		doInjectMsg(i + iFrom, ratelimit);
+	if (ustrcmp(UCHAR_CONSTANT("litteral"), wordBuf) == 0) {
+		/* user has provided content for a message */
+		++pszCmd; /* ignore following space */
+		CHKiRet(doInjectMsg(pszCmd, ratelimit));
+		nMsgs = 1;
+	} else { /* assume 2 args, (from_idx, to_idx) */
+		iFrom = atoi((char*)wordBuf);
+		getFirstWord(&pszCmd, wordBuf, sizeof(wordBuf), TO_LOWERCASE);
+		nMsgs = atoi((char*)wordBuf);
+		for(i = 0 ; i < nMsgs ; ++i) {
+			CHKiRet(doInjectNumericSuffixMsg(i + iFrom, ratelimit));
+		}
 	}
-
 	CHKiRet(sendResponse(pSess, "%d messages injected\n", nMsgs));
+	
 	DBGPRINTF("imdiag: %d messages injected\n", nMsgs);
 
 finalize_it:
 	if(ratelimit != NULL)
 		ratelimitDestruct(ratelimit);
+    free(litteralMsg);
 	RETiRet;
 }
 
@@ -297,6 +315,25 @@ finalize_it:
 	RETiRet;
 }
 
+static rsRetVal
+awaitLookupTableReload(tcps_sess_t *pSess)
+{
+	DEFiRet;
+
+	while(1) {
+		if(lookupPendingReloadCount() == 0) {
+			break;
+		}
+		srSleep(0,500000);
+	}
+
+	CHKiRet(sendResponse(pSess, "no pending lookup-table reloads found\n"));
+	DBGPRINTF("imdiag: no pending lookup-table reloads found\n");
+
+finalize_it:
+	RETiRet;
+}
+
 /* Function to handle received messages. This is our core function!
  * rgerhards, 2009-05-24
  */
@@ -328,6 +365,8 @@ OnMsgReceived(tcps_sess_t *pSess, uchar *pRcv, int iLenMsg)
 		DBGPRINTF("imdiag: %d messages in main queue\n", iOverallQueueSize);
 	} else if(!ustrcmp(cmdBuf, UCHAR_CONSTANT("waitmainqueueempty"))) {
 		CHKiRet(waitMainQEmpty(pSess));
+	} else if(!ustrcmp(cmdBuf, UCHAR_CONSTANT("awaitlookuptablereload"))) {
+		CHKiRet(awaitLookupTableReload(pSess));
 	} else if(!ustrcmp(cmdBuf, UCHAR_CONSTANT("injectmsg"))) {
 		CHKiRet(injectMsg(pszMsg, pSess));
 	} else {

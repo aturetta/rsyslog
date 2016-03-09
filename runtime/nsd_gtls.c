@@ -1592,8 +1592,9 @@ Rcv(nsd_t *pNsd, uchar *pBuf, ssize_t *pLenBuf)
 	*pLenBuf = iBytesCopy;
 
 finalize_it:
-	if (iRet != RS_RET_OK) {
-		/* in this case, we also need to free the receive buffer, if we
+	if (iRet != RS_RET_OK && 
+		iRet != RS_RET_RETRY) {
+		/* We need to free the receive buffer in error error case unless a retry is wanted. , if we
 		 * allocated one. -- rgerhards, 2008-12-03 -- moved here by alorbach, 2015-12-01
 		 */
 		*pLenBuf = 0;
@@ -1662,6 +1663,8 @@ EnableKeepAlive(nsd_t *pNsd)
  * open a plain tcp socket and then, if in TLS mode, do a handshake on it.
  * rgerhards, 2008-03-19
  */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations" /* TODO: FIX Warnings! */
 static rsRetVal
 Connect(nsd_t *pNsd, int family, uchar *port, uchar *host)
 {
@@ -1754,6 +1757,7 @@ finalize_it:
 
 	RETiRet;
 }
+#pragma GCC diagnostic pop
 
 
 /* queryInterface function */

@@ -424,6 +424,24 @@ finalize_it:
 	RETiRet;
 }
 
+static rsRetVal
+execReloadLookupTable(struct cnfstmt *stmt) {
+	lookup_ref_t *t;
+	DEFiRet;
+	t = stmt->d.s_reload_lookup_table.table;
+	if (t == NULL) {
+		ABORT_FINALIZE(RS_RET_NONE);
+	}
+	
+	CHKiRet(lookupReload(t, stmt->d.s_reload_lookup_table.stub_value));
+	/* Note that reload dispatched above is performed asynchronously,
+	   on a different thread. So rsRetVal it returns means it was triggered
+	   successfully, and not that it was reloaded successfully. */
+	
+finalize_it:
+	RETiRet;
+}
+
 /* The rainerscript execution engine. It is debatable if that would be better
  * contained in grammer/rainerscript.c, HOWEVER, that file focusses primarily
  * on the parsing and object creation part. So as an actual executor, it is
@@ -475,6 +493,9 @@ scriptExec(struct cnfstmt *root, msg_t *pMsg, wti_t *pWti)
 		case S_PROPFILT:
 			CHKiRet(execPROPFILT(stmt, pMsg, pWti));
 			break;
+        case S_RELOAD_LOOKUP_TABLE:
+			CHKiRet(execReloadLookupTable(stmt));
+			break;
 		default:
 			dbgprintf("error: unknown stmt type %u during exec\n",
 				(unsigned) stmt->nodetype);
@@ -495,6 +516,7 @@ processBatch(batch_t *pBatch, wti_t *pWti)
 	int i;
 	msg_t *pMsg;
 	ruleset_t *pRuleset;
+	rsRetVal localRet;
 	DEFiRet;
 
 	DBGPRINTF("processBATCH: batch of %d elements must be processed\n", pBatch->nElem);
@@ -506,15 +528,19 @@ processBatch(batch_t *pBatch, wti_t *pWti)
 		pMsg = pBatch->pElem[i].pMsg;
 		DBGPRINTF("processBATCH: next msg %d: %.128s\n", i, pMsg->pszRawMsg);
 		pRuleset = (pMsg->pRuleset == NULL) ? ourConf->rulesets.pDflt : pMsg->pRuleset;
-		scriptExec(pRuleset->root, pMsg, pWti);
-		// TODO: think if we need a return state of scriptExec - most probably
-		// the answer is "no", as we need to process the batch in any case!
-		// TODO: we must refactor this!  flag messages as committed
-		batchSetElemState(pBatch, i, BATCH_STATE_COMM);
+		localRet = scriptExec(pRuleset->root, pMsg, pWti);
+		/* the most important case here is that processing may be aborted
+		 * due to pbShutdownImmediate, in which case we MUST NOT flag this
+		 * message as committed. If we would do so, the message would
+		 * potentially be lost.
+		 */
+		if(localRet == RS_RET_OK)
+			batchSetElemState(pBatch, i, BATCH_STATE_COMM);
 	}
 
 	/* commit phase */
-	dbgprintf("END batch execution phase, entering to commit phase\n");
+	DBGPRINTF("END batch execution phase, entering to commit phase "
+		"[processed %d of %d messages]\n", i, batchNumMsgs(pBatch));
 	actionCommitAllDirect(pWti);
 
 	DBGPRINTF("processBATCH: batch of %d elements has been processed\n", pBatch->nElem);
