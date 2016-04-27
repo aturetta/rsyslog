@@ -1,4 +1,103 @@
 ------------------------------------------------------------------------------
+Version 8.18.0 [v8-stable] 2016-04-19
+- testbench: When running privdrop tests testbench tries to drop
+  user to "rsyslog", "syslog" or "daemon" when running as root and
+  you don't explict set RSYSLOG_TESTUSER environment variable.
+  Make sure the unprivileged testuser can write into tests/ dir!
+- templates: add option to convert timestamps to UTC
+  closes https://github.com/rsyslog/rsyslog/issues/730
+- omjournal: fix segfault (regression in 8.17.0)
+- imptcp: added AF_UNIX support
+  Thanks to Nathan Brown for implementing this feature.
+- new template options
+  * compressSpace
+  * date-utc
+- redis: support for authentication
+  Thanks to Manohar Ht for the patch
+- omkafka: makes kafka-producer on-HUP restart optional 
+  As of now, omkafka kills and re-creates kafka-producer on HUP. This
+  is not always desirable. This change introduces an action param
+  (reopenOnHup="on|off") which allows user to control re-cycling of
+  kafka-producer.
+  It defaults to on (for backward compatibility). Off allows user to
+  ignore HUP as far as kafka-producer is concerned.
+  Thanks to Janmejay Singh for implementing this feature
+- imfile: new "FreshStartTail" input parameter
+  Thanks to Curu Wong for implementing this.
+- omjournal: fix libfastjson API issues
+  This module accessed private data members of libfastjson
+- ommongodb: fix json API issues
+  This module accessed private data members of libfastjson
+- testbench improvements (more tests and more thourough tests)
+  among others:
+  - tests for omjournal added
+  - tests for KSI subsystem
+  - tests for priviledge drop statements
+  - basic test for RELP with TLS
+  - some previously disabled tests have been re-enabled
+- dynamic stats subsystem: a couple of smaller changes
+  they also involve the format, which is slightly incompatible to
+  previous version. As this was out only very recently (last version),
+  we considered this as acceptable.
+  Thanks to Janmejay Singh for developing this.
+- foreach loop: now also iterates over objects (not just arrays)
+  Thanks to Janmejay Singh for developing this.
+- improvements to the CI environment
+- enhancement: queue subsystem is more robst in regard to some corruptions
+  It is now detected if a .qi file states that the queue contains more
+  records than there are actually inside the queue files. Previously this
+  resulted in an emergency switch to direct mode, now the problem is only
+  reported but processing continues.
+- enhancement: Allow rsyslog to bind UDP ports even w/out specific
+  interface being up at the moment.
+  Alternatively, rsyslog could be ordered after networking, however,
+  that might have some negative side effects. Also IP_FREEBIND is
+  recommended by systemd documentation.
+  Thanks to Nirmoy Das and Marius Tomaschewski for the patch.
+- cleanup: removed no longer needed json-c compatibility layer
+  as we now always use libfastjson, we do not need to support old
+  versions of json-c (libfastjson was based on the newest json-c
+  version at the time of the fork, which is the newest in regard
+  to the compatibility layer)
+- new External plugin for sending metrics to SPM Monitoring SaaS
+  Thanks to Radu Gheorghe for the patch.
+- bugfix imfile: fix memory corruption bug when appending @cee
+  Thanks to Brian Knox for the patch.
+- bugfix: memory misallocation if position.from and position.to is used
+  a negative amount of memory is tried to be allocated if position.from
+  is smaller than the buffer size (at least with json variables). This
+  usually leads to a segfault.
+  closes https://github.com/rsyslog/rsyslog/issues/915
+- bugfix: fix potential memleak in TCP allowed sender definition
+  depending on circumstances, a very small leak could happen on each
+  HUP. This was caused by an invalid macro definition which did not rule
+  out side effects.
+- bugfix: $PrivDropToGroupID actually did a name lookup
+  ... instead of using the provided ID
+- bugfix: small memory leak in imfile
+  Thanks to Tomas Heinrich for the patch.
+- bugfix: double free in jsonmesg template
+  There has to be actual json data in the message (from mmjsonparse,
+  mmnormalize, imjournal, ...) to trigger the crash.
+  Thanks to Tomas Heinrich for the patch.
+- bugfix: incorrect formatting of stats when CEE/Json format is used
+  This lead to ill-formed json being generated
+- bugfix omfwd: new-style keepalive action parameters did not work 
+  due to being inconsistently spelled inside the code. Note that legacy
+  parameters $keepalive... always worked
+  see also: https://github.com/rsyslog/rsyslog/issues/916
+  Thanks to Devin Christensen for alerting us and an analysis of the
+  root cause.
+- bugfix: memory leaks in logctl utility
+  Detected by clang static analyzer. Note that these leaks CAN happen in
+  practice and may even be pretty large. This was probably never detected
+  because the tool is not often used.
+- bugfix omrelp: fix segfault if no port action parameter was given
+  closes https://github.com/rsyslog/rsyslog/issues/911
+- bugfix imtcp: Messages not terminated by a NL were discarded 
+  ... upon connection termination.
+  Thanks to Tomas Heinrich for the patch.
+------------------------------------------------------------------------------
 Version 8.17.0 [v8-stable] 2016-03-08
 - NEW REQUIREMENT: libfastjson
   see also:

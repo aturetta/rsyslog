@@ -56,7 +56,7 @@ case $1 in
 		rm -f rsyslog.out.*.log work-presort rsyslog.pipe
 		rm -f rsyslog.input rsyslog.empty
 		rm -f testconf.conf
-		rm -f rsyslog.errorfile
+		rm -f rsyslog.errorfile tmp.qi
 		rm -f core.* vgcore.*
 		# Note: rsyslog.action.*.include must NOT be deleted, as it
 		# is used to setup some parameters BEFORE calling init. This
@@ -84,7 +84,7 @@ case $1 in
 		rm -f rsyslog.out.*.log rsyslog.random.data work-presort rsyslog.pipe
 		rm -f rsyslog.input rsyslog.conf.tlscert stat-file1 rsyslog.empty
 		rm -f testconf.conf
-		rm -f rsyslog.errorfile
+		rm -f rsyslog.errorfile tmp.qi
 		rm -f HOSTNAME imfile-state:.-rsyslog.input
 		unset TCPFLOOD_EXTRA_OPTS
 		echo  -------------------------------------------------------------------------------
@@ -260,7 +260,7 @@ case $1 in
 		;;
    'tcpflood') # do a tcpflood run and check if it worked params are passed to tcpflood
 		shift 1
-		eval ./tcpflood $* $TCPFLOOD_EXTRA_OPTS
+		eval ./tcpflood "$@" $TCPFLOOD_EXTRA_OPTS
 		if [ "$?" -ne "0" ]; then
 		  echo "error during tcpflood! see rsyslog.out.log.save for what was written"
 		  cp rsyslog.out.log rsyslog.out.log.save
@@ -434,6 +434,12 @@ case $1 in
 		;;
    'add-conf')   # start a standard test rsyslog.conf
 		echo "$2" >> testconf.conf
+		;;
+   'require-journalctl')   # check if journalctl exists on the system
+		if ! hash journalctl 2>/dev/null ; then
+		    echo "journalctl command missing, skipping test"
+		    exit 77
+		fi
 		;;
    'error-exit') # this is called if we had an error and need to abort. Here, we
                 # try to gather as much information as possible. That's most important

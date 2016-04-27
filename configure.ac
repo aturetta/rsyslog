@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([rsyslog],[8.17.0],[rsyslog@lists.adiscon.com])
+AC_INIT([rsyslog],[8.18.0],[rsyslog@lists.adiscon.com])
 AM_INIT_AUTOMAKE([subdir-objects])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -27,25 +27,6 @@ PKG_PROG_PKG_CONFIG
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.1.9)
 PKG_CHECK_MODULES([JSON_C], [libfastjson],,)
-
-save_CFLAGS="$CFLAGS"
-save_LIBS="$LIBS"
-
-CFLAGS="$CFLAGS $JSON_C_CFLAGS"
-LIBS="$LIBS $JSON_C_LIBS"
-
-# if int64 is supported, use it
-AC_CHECK_LIB(json-c, json_object_new_object,,)
-AC_CHECK_FUNCS(json_object_new_int64,,)
-
-# look for newer API
-AC_CHECK_FUNCS(json_tokener_error_desc,,)
-AC_CHECK_FUNCS(json_object_object_get_ex,,)
-AC_CHECK_FUNCS(json_object_to_json_string_ext,,)
-AC_CHECK_TYPES([json_bool],,,[[#include <json_object.h>]])
-
-CFLAGS="$save_CFLAGS"
-LIBS="$save_LIBS"
 
 AC_DEFINE_UNQUOTED([PLATFORM_ID], ["${host}"], [platform id for display purposes])
 # we don't mind if we don't have the lsb_release utility. But if we have, it's
@@ -1109,6 +1090,13 @@ if test "x$enable_relp" = "xyes"; then
 	PKG_CHECK_MODULES(RELP, relp >= 1.2.5)
 fi
 AM_CONDITIONAL(ENABLE_RELP, test x$enable_relp = xyes)
+
+# RELP default port
+AC_ARG_ENABLE(omrelp-default-port,
+        [AS_HELP_STRING([--enable-omrelp-default-port],[set omrelp default port @<:@default=514@:>@])],
+	[ AC_DEFINE_UNQUOTED(RELP_DFLT_PT, "${enableval}", [default port for omrelp]) ],
+	[ AC_DEFINE(RELP_DFLT_PT, "514", [default port for omrelp]) ]
+)
 
 
 # GuardTime support
